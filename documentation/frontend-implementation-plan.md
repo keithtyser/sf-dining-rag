@@ -30,14 +30,23 @@ This document outlines the step-by-step implementation plan for creating an inno
      - Size variations (sm, default, lg)
      - Hover effects (lift, highlight)
      - Composable sub-components (Header, Title, Description, Content, Footer)
+   - Created Input component with:
+     - Multiple variants (default, ghost, error, success)
+     - Size variations (sm, default, lg)
+     - Built-in error and success states
+     - Comprehensive validation support
+   - Created Modal component with:
+     - Radix UI Dialog integration
+     - Multiple sizes (sm, default, lg, xl, full)
+     - Composable parts (Header, Title, Description, Footer)
+     - Animated transitions
+     - Accessible by default
    - Added Storybook stories for all components
    - Set up utility functions for className merging
    - Configured global styles and theme variables
 
 ### Next Steps 🚧
 1. Continue Core Components
-   - Create Input component
-   - Create Modal component using Radix UI
    - Create Toast notifications
    - Add more Storybook stories
 
@@ -110,8 +119,16 @@ This document outlines the step-by-step implementation plan for creating an inno
   - Composable sub-components
   - Interactive hover states
   - Comprehensive Storybook examples
-- [ ] Create Input component
-- [ ] Create Modal component
+- [x] Create Input component
+  - Multiple variants and states
+  - Error and success handling
+  - Size variations
+  - Accessibility support
+- [x] Create Modal component
+  - Radix UI integration
+  - Multiple sizes
+  - Animated transitions
+  - Accessible dialogs
 - [ ] Create Toast notifications
 - [ ] Implement Loading states/spinners
 
@@ -250,7 +267,7 @@ This document outlines the step-by-step implementation plan for creating an inno
 Use this section to track overall progress:
 
 - [x] Project Setup (3/3 sections complete)
-- [ ] Core Components (2/6 sections complete)
+- [ ] Core Components (4/6 sections complete)
 - [ ] Pipeline Visualization (0/3 sections complete)
 - [ ] Vector Space Visualization (0/2 sections complete)
 - [ ] Performance Metrics (0/2 sections complete)
