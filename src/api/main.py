@@ -3,6 +3,7 @@ import math
 from typing import Dict, List, Optional
 from fastapi import FastAPI, HTTPException, Query, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -48,6 +49,9 @@ app.add_middleware(
 
 # Add request logging middleware
 app.add_middleware(RequestLoggingMiddleware)
+
+# Add GZip compression middleware
+app.add_middleware(GZipMiddleware, minimum_size=1000)  # Only compress responses larger than 1KB
 
 # Store conversation histories
 conversations: Dict[str, ConversationHistory] = {}

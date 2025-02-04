@@ -28,19 +28,18 @@
   - [x] Create models for detailed restaurant information
   - [x] Implement restaurant search and filtering
   - [x] Add sorting and pagination
-- [x] Add basic middleware:
+- [x] Add middleware:
   - [x] CORS handling
   - [x] Error handling
   - [x] Request validation
   - [x] Rate limiting
   - [x] Request logging
+  - [x] Response compression (GZip)
 - [x] Add API documentation using FastAPI's built-in Swagger UI
 
 ## Next Steps
 
 ### 1. Complete API Development
-- [ ] Enhance middleware:
-  - [ ] Add response compression
 - [ ] Add API versioning
 - [ ] Add authentication (if needed)
 
