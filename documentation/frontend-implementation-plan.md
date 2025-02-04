@@ -25,13 +25,17 @@ This document outlines the step-by-step implementation plan for creating an inno
 
 2. Core Components (In Progress)
    - Created reusable Button component with variants
-   - Added Storybook stories for Button
+   - Created Card component with:
+     - Multiple variants (default, outline, ghost, elevated)
+     - Size variations (sm, default, lg)
+     - Hover effects (lift, highlight)
+     - Composable sub-components (Header, Title, Description, Content, Footer)
+   - Added Storybook stories for all components
    - Set up utility functions for className merging
    - Configured global styles and theme variables
 
 ### Next Steps 🚧
 1. Continue Core Components
-   - Create Card component
    - Create Input component
    - Create Modal component using Radix UI
    - Create Toast notifications
@@ -101,7 +105,12 @@ This document outlines the step-by-step implementation plan for creating an inno
   - Outline, Ghost, Link variants
   - Multiple sizes
   - Storybook documentation
-- [ ] Create Card component for info displays
+- [x] Create Card component for info displays
+  - Multiple variants and sizes
+  - Composable sub-components
+  - Interactive hover states
+  - Comprehensive Storybook examples
+- [ ] Create Input component
 - [ ] Create Modal component
 - [ ] Create Toast notifications
 - [ ] Implement Loading states/spinners
@@ -241,7 +250,7 @@ This document outlines the step-by-step implementation plan for creating an inno
 Use this section to track overall progress:
 
 - [x] Project Setup (3/3 sections complete)
-- [ ] Core Components (1/3 sections complete)
+- [ ] Core Components (2/6 sections complete)
 - [ ] Pipeline Visualization (0/3 sections complete)
 - [ ] Vector Space Visualization (0/2 sections complete)
 - [ ] Performance Metrics (0/2 sections complete)
