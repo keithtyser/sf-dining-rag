@@ -24,6 +24,10 @@ from api.middleware import RequestLoggingMiddleware
 from query import get_similar_chunks
 from chat import generate_response, ConversationHistory
 
+# API version and prefix
+API_VERSION = "1.0.0"
+API_PREFIX = "/api/v1"
+
 # Create rate limiter
 limiter = Limiter(key_func=get_remote_address)
 
@@ -31,7 +35,10 @@ limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(
     title="Restaurant Assistant API",
     description="API for querying restaurant information and chatting about restaurants",
-    version="1.0.0"
+    version=API_VERSION,
+    docs_url=f"{API_PREFIX}/docs",
+    redoc_url=f"{API_PREFIX}/redoc",
+    openapi_url=f"{API_PREFIX}/openapi.json"
 )
 
 # Add rate limiter to app
@@ -56,17 +63,17 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)  # Only compress responses
 # Store conversation histories
 conversations: Dict[str, ConversationHistory] = {}
 
-@app.get("/")
+@app.get(f"{API_PREFIX}")
 @limiter.limit("10/minute")
 async def root(request: Request):
     """Root endpoint returning API information"""
     return {
         "name": "Restaurant Assistant API",
-        "version": "1.0.0",
+        "version": API_VERSION,
         "status": "operational"
     }
 
-@app.post("/api/query", response_model=QueryResponse, responses={400: {"model": ErrorResponse}})
+@app.post(f"{API_PREFIX}/query", response_model=QueryResponse, responses={400: {"model": ErrorResponse}})
 @limiter.limit("30/minute")
 async def query_restaurants(request: Request, query_request: QueryRequest):
     """
@@ -122,7 +129,7 @@ async def query_restaurants(request: Request, query_request: QueryRequest):
             ).dict()
         )
 
-@app.post("/api/chat", response_model=ChatResponse, responses={400: {"model": ErrorResponse}})
+@app.post(f"{API_PREFIX}/chat", response_model=ChatResponse, responses={400: {"model": ErrorResponse}})
 @limiter.limit("20/minute")
 async def chat(request: Request, chat_request: ChatRequest):
     """
@@ -267,7 +274,7 @@ def process_restaurant_results(results: List[Dict], page: int = 1, page_size: in
         total_pages=total_pages
     )
 
-@app.get("/api/restaurants", response_model=RestaurantSearchResponse, responses={400: {"model": ErrorResponse}})
+@app.get(f"{API_PREFIX}/restaurants", response_model=RestaurantSearchResponse, responses={400: {"model": ErrorResponse}})
 @limiter.limit("30/minute")
 async def search_restaurants(request: Request, params: RestaurantSearchParams = Depends()):
     """
@@ -328,7 +335,7 @@ async def search_restaurants(request: Request, params: RestaurantSearchParams = 
             ).dict()
         )
 
-@app.get("/api/restaurants/{restaurant_id}", response_model=RestaurantDetails, responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}})
+@app.get(f"{API_PREFIX}/restaurants/{restaurant_id}", response_model=RestaurantDetails, responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}})
 @limiter.limit("30/minute")
 async def get_restaurant_details(request: Request, restaurant_id: str):
     """

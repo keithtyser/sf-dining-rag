@@ -15,7 +15,7 @@
 - [x] Add conversation history management
 - [x] Implement follow-up question handling
 
-### API Development [IN PROGRESS]
+### API Development [COMPLETED]
 - [x] Set up FastAPI server
 - [x] Create API models:
   - [x] Request models for queries and chat
@@ -36,17 +36,16 @@
   - [x] Request logging
   - [x] Response compression (GZip)
 - [x] Add API documentation using FastAPI's built-in Swagger UI
+- [x] Add API versioning with /api/v1 prefix
 
-## Next Steps
-
-### 1. Complete API Development
-- [ ] Add API versioning
-- [ ] Add authentication (if needed)
-
-### 2. Testing and Optimization
+### Testing and Optimization [IN PROGRESS]
+- [x] Set up testing environment:
+  - [x] Install pytest and related packages
+  - [x] Configure test settings
+  - [x] Set up test fixtures
 - [ ] Create test suite:
   - [ ] Unit tests:
-    - [ ] Test embedding functions
+    - [x] Test embedding functions
     - [ ] Test vector search
     - [ ] Test chat functionality
   - [ ] Integration tests:
@@ -69,7 +68,7 @@
   - [ ] Cache common API responses
   - [ ] Cache restaurant data
 
-### 3. Documentation and Deployment
+### Documentation and Deployment
 - [ ] Create documentation:
   - [ ] API usage guide
   - [ ] System architecture diagram
