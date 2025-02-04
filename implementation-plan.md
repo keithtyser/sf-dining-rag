@@ -13,24 +13,24 @@
 - [x] Add conversation history management
 - [x] Implement follow-up question handling
 
-## Next Steps
-1. API Development
-   - [ ] Set up FastAPI server
-   - [ ] Create API models:
-     - [ ] Request models for queries and chat
-     - [ ] Response models with proper typing
-     - [ ] Error response models
-   - [ ] Create endpoints for:
-     - [ ] Query processing (/api/query)
-     - [ ] Chat completion (/api/chat)
-     - [ ] Restaurant information retrieval (/api/restaurants)
-   - [ ] Add middleware for:
-     - [ ] Error handling
-     - [ ] Request validation
-     - [ ] Rate limiting
-   - [ ] Add API documentation using FastAPI's built-in Swagger UI
+## API Development [IN PROGRESS]
+- [x] Set up FastAPI server
+- [x] Create API models:
+  - [x] Request models for queries and chat
+  - [x] Response models with proper typing
+  - [x] Error response models
+- [x] Create endpoints for:
+  - [x] Query processing (/api/query)
+  - [x] Chat completion (/api/chat)
+  - [ ] Restaurant information retrieval (/api/restaurants)
+- [ ] Add middleware for:
+  - [x] Error handling
+  - [x] Request validation
+  - [ ] Rate limiting
+- [x] Add API documentation using FastAPI's built-in Swagger UI
 
-2. Testing and Optimization
+## Next Steps
+1. Testing and Optimization
    - [ ] Create comprehensive test suite:
      - [ ] Unit tests for core functions
      - [ ] Integration tests for API endpoints
@@ -52,7 +52,7 @@
      - [ ] Response time under load
      - [ ] Resource usage monitoring
 
-3. Documentation and Deployment
+2. Documentation and Deployment
    - [ ] Create comprehensive documentation:
      - [ ] API usage guide
      - [ ] System architecture
