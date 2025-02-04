@@ -43,11 +43,28 @@
   - [x] Install pytest and related packages
   - [x] Configure test settings
   - [x] Set up test fixtures
+  - [x] Set up environment variable handling for tests
 - [ ] Create test suite:
   - [ ] Unit tests:
-    - [x] Test embedding functions
-    - [ ] Test vector search
-    - [ ] Test chat functionality
+    - [x] Test embedding functions:
+      - [x] Test valid input handling
+      - [x] Test empty/whitespace input handling
+      - [x] Test special character handling
+      - [x] Test concurrent embedding generation
+      - [x] Test embedding consistency
+    - [x] Test vector search:
+      - [x] Test Pinecone initialization
+      - [x] Test data type conversion
+      - [x] Test vector upserting
+      - [x] Test similarity search
+      - [x] Test score thresholding
+      - [x] Test empty index handling
+    - [x] Test chat functionality:
+      - [x] Test conversation history management
+      - [x] Test response generation
+      - [x] Test context integration
+      - [x] Test error handling
+      - [x] Test history limits
   - [ ] Integration tests:
     - [ ] Test API endpoints
     - [ ] Test middleware

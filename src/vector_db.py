@@ -155,7 +155,8 @@ def query_similar(
     index: Any,
     query_embedding: List[float],
     top_k: int = 5,
-    include_metadata: bool = True
+    include_metadata: bool = True,
+    score_threshold: float = 0.0
 ) -> List[Dict[str, Any]]:
     """
     Query Pinecone index for similar vectors
@@ -165,6 +166,7 @@ def query_similar(
         query_embedding (List[float]): Query vector to find similar embeddings
         top_k (int): Number of similar results to return
         include_metadata (bool): Whether to include metadata in results
+        score_threshold (float): Minimum similarity score for results
         
     Returns:
         List[Dict[str, Any]]: List of similar items with scores and metadata
@@ -175,7 +177,13 @@ def query_similar(
             top_k=top_k,
             include_metadata=include_metadata
         )
-        return results['matches']
+        
+        # Filter results by score threshold
+        matches = results.get('matches', [])
+        if score_threshold > 0:
+            matches = [m for m in matches if m.get('score', 0) >= score_threshold]
+            
+        return matches
         
     except Exception as e:
         print(f"Error querying Pinecone: {str(e)}")

@@ -1,5 +1,5 @@
 import os
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 from dataclasses import dataclass
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -32,104 +32,78 @@ class ConversationHistory:
         """Clear the conversation history"""
         self.messages = []
 
-def create_prompt_with_context(
-    query: str,
-    context_results: List[Dict[str, Any]],
-    conversation_history: Optional[ConversationHistory] = None
-) -> List[Dict[str, str]]:
-    """
-    Create a prompt for the OpenAI API using the query, context, and conversation history
-    
-    Args:
-        query (str): The user's query
-        context_results (List[Dict[str, Any]]): Retrieved context from vector search
-        conversation_history (Optional[ConversationHistory]): Previous conversation history
-        
-    Returns:
-        List[Dict[str, str]]: Messages for the OpenAI chat completion API
-    """
-    # Start with system message defining the assistant's role
-    messages = [{
-        "role": "system",
-        "content": """You are a knowledgeable restaurant assistant who helps users find information about restaurants and their menus. 
-Your responses should be:
-1. Accurate and based only on the provided context
-2. Natural and conversational
-3. Concise but informative
-4. Focused on answering the user's specific question
+def create_prompt_with_context(query: str, context: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+    """Create a chat prompt with context from vector search results"""
+    system_message = (
+        "You are a knowledgeable restaurant assistant who helps users find information about restaurants "
+        "and their menus. \n"
+        "Your responses should be:\n"
+        "1. Accurate and based only on the provided context\n"
+        "2. Natural and conversational\n"
+        "3. Concise but informative\n"
+        "4. Focused on answering the user's specific question\n\n"
+    )
 
-If you don't have enough information in the context to fully answer a question, acknowledge what you don't know.
-If the context doesn't contain any relevant information, politely say so."""
-    }]
+    if context:
+        system_message += "Here is the relevant context for the current query:\n"
+        for i, result in enumerate(context, 1):
+            system_message += (
+                f"{i}. Restaurant: {result.get('restaurant', 'N/A')}\n"
+                f"   Rating: {result.get('rating', 'N/A')}\n"
+                f"   Price Range: {result.get('price_range', 'N/A')}\n"
+                f"   Description: {result.get('description', 'N/A')}\n"
+                f"   Relevance Score: {result.get('score', 0):.2f}\n\n"
+            )
     
-    # Add conversation history if available
-    if conversation_history:
-        messages.extend(conversation_history.get_messages())
-    
-    # Format context into a string
-    context_str = format_results(context_results)
-    
-    # Add context and query as user message
-    messages.append({
-        "role": "user",
-        "content": f"""Context information:
-{context_str}
+    system_message += (
+        "If you don't have enough information in the context to fully answer a question, "
+        "acknowledge what you don't know.\n"
+        "If the context doesn't contain any relevant information, politely say so."
+    )
 
-User question: {query}"""
-    })
-    
-    return messages
+    return [
+        {"role": "system", "content": system_message},
+        {"role": "user", "content": query}
+    ]
 
 def generate_response(
     query: str,
-    conversation_history: Optional[ConversationHistory] = None,
-    model: str = "gpt-4-turbo-preview",
-    temperature: float = 0.7,
-    max_tokens: int = 500
+    conversation_history: ConversationHistory,
+    client: Optional[OpenAI] = None,
+    get_similar_chunks: Optional[Callable] = None
 ) -> Optional[str]:
-    """
-    Generate a response to the user's query using the OpenAI API
-    
-    Args:
-        query (str): The user's query
-        conversation_history (Optional[ConversationHistory]): Previous conversation history
-        model (str): OpenAI model to use
-        temperature (float): Response creativity (0.0 to 1.0)
-        max_tokens (int): Maximum response length
-        
-    Returns:
-        Optional[str]: Generated response if successful, None otherwise
-    """
+    """Generate a response to the user's query using the OpenAI API"""
     try:
-        # Get relevant context from vector search
-        context_results = get_similar_chunks(query, top_k=3)
+        # Use the provided client or create a new one
+        openai_client = client or OpenAI()
         
-        # Create prompt with context
-        messages = create_prompt_with_context(
-            query,
-            context_results,
-            conversation_history
-        )
+        # Get similar chunks if the function is provided
+        context = []
+        if get_similar_chunks:
+            context = get_similar_chunks(query)
         
-        # Generate response using OpenAI API
-        response = client.chat.completions.create(
-            model=model,
+        # Create the base messages list with just the system message
+        messages = [create_prompt_with_context(query, context)[0]]  # Get only the system message
+        
+        # Add conversation history
+        if conversation_history.messages:
+            messages.extend(conversation_history.messages)
+            
+        # Add the current query
+        messages.append({"role": "user", "content": query})
+        
+        # Generate response
+        response = openai_client.chat.completions.create(
+            model="gpt-3.5-turbo",
             messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens
+            temperature=0.7,
+            max_tokens=150
         )
         
-        # Extract response text
+        # Extract and return the response content
         if response.choices and response.choices[0].message:
-            response_text = response.choices[0].message.content
-            
-            # Update conversation history if provided
-            if conversation_history:
-                conversation_history.add_message("user", query)
-                conversation_history.add_message("assistant", response_text)
-            
-            return response_text
-            
+            return response.choices[0].message.content
+        
         return None
         
     except Exception as e:
