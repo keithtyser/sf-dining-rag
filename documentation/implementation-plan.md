@@ -7,7 +7,7 @@ This document provides a step-by-step guide to implement a conversational AI cha
 1. [Environment Setup](#environment-setup) ✅
 2. [Project Structure Setup](#project-structure-setup) ✅
 3. [Data Ingestion Pipeline](#data-ingestion-pipeline) ✅
-4. [Text Chunking and Embedding Generation](#text-chunking-and-embedding-generation) 🔄
+4. [Text Chunking and Embedding Generation](#text-chunking-and-embedding-generation) ✅
 5. [Storing Embeddings in the Vector Database](#storing-embeddings-in-the-vector-database)
 6. [Query Processing Pipeline](#query-processing-pipeline)
 7. [LLM Integration and Prompt Engineering](#llm-integration-and-prompt-engineering)
@@ -118,73 +118,86 @@ This document provides a step-by-step guide to implement a conversational AI cha
   ```
 - [x] Test the function with a sample article title (Completed: Successfully fetched and enriched data with cuisine descriptions)
 
-## Text Chunking and Embedding Generation 🔄
+## Text Chunking and Embedding Generation ✅
 
-### 4.1 Implement Text Chunking
+### 4.1 Implement Text Chunking ✅
 
-- [ ] In "src/chunking.py", write a function to split text into manageable chunks:
+- [x] In "src/chunking.py", write functions to split text into manageable chunks:
   ```python
-  def chunk_text(text, max_tokens=500):
-      # A simple implementation: split the text into fixed-size pieces
-      return [text[i:i+max_tokens] for i in range(0, len(text), max_tokens)]
+  @dataclass
+  class TextChunk:
+      text: str
+      metadata: Dict[str, Any]
+      token_count: int
+
+  def chunk_text(text: str, max_tokens: int = 500) -> List[str]:
+      # Implementation handles:
+      # - Sentence boundaries
+      # - Long sentence splitting
+      # - Token count estimation
+      # - Metadata preservation
+      pass
+
+  def create_restaurant_chunks(restaurant_data: Dict[str, Any]) -> List[TextChunk]:
+      # Creates chunks for restaurant data with metadata
+      pass
+
+  def get_ingredient_chunks(ingredients: List[str]) -> List[TextChunk]:
+      # Creates chunks for ingredient lists
+      pass
   ```
-- [ ] Test the chunking function with sample text.
+- [x] Test the chunking functions with sample text (Completed: Successfully processed 52,696 records into 10,716 chunks)
 
-### 4.2 Generate Embeddings Using OpenAI
+### 4.2 Generate Embeddings Using OpenAI ✅
 
-- [ ] In "src/embedding.py", implement a function to generate embeddings:
+- [x] In "src/embedding.py", implement a function to generate embeddings:
   ```python
-  import openai
-
-  # Replace with your actual OpenAI API key
-  openai.api_key = "YOUR_OPENAI_API_KEY"
-
   def get_embedding(text, model="text-embedding-ada-002"):
-      response = openai.Embedding.create(
+      response = client.embeddings.create(
           input=[text],
           model=model
       )
-      return response['data'][0]['embedding']
+      return response.data[0].embedding
   ```
-- [ ] Test the embedding function with a sample text snippet.
+- [x] Test the embedding function with sample text snippets (Completed: Successfully generated embeddings for restaurant data chunks)
+- [x] Implement batch processing for multiple chunks
+- [x] Add save/load functionality for embeddings
+- [x] Add proper error handling and retries
+- [x] Set up secure API key management
 
-## Storing Embeddings in the Vector Database
+## Storing Embeddings in the Vector Database ✅
 
-### 5.1 Set Up Pinecone (Using Free Tier)
+### 5.1 Set Up Pinecone (Using Free Tier) ✅
 
-- [ ] Sign up for Pinecone and obtain your API key.
-- [ ] In "src/vector_db.py", write functions to initialize and interact with Pinecone:
+- [x] Sign up for Pinecone and obtain your API key
+- [x] In "src/vector_db.py", write functions to initialize and interact with Pinecone:
   ```python
-  import pinecone
+  def init_pinecone():
+      pc = Pinecone(api_key=os.getenv('PINECONE_API_KEY'))
+      return pc.Index(INDEX_NAME)
 
-  # Set your Pinecone API key and environment
-  PINECONE_API_KEY = "YOUR_PINECONE_API_KEY"
-  PINECONE_ENV = "us-west1-gcp"  # Change as needed
-
-  pinecone.init(api_key=PINECONE_API_KEY, environment=PINECONE_ENV)
-
-  INDEX_NAME = "restaurant-chatbot-index"
-
-  def init_index():
-      if INDEX_NAME not in pinecone.list_indexes():
-          # The dimension should match the embedding size (e.g., 1536 for ada-002)
-          pinecone.create_index(name=INDEX_NAME, dimension=1536)
-      index = pinecone.Index(INDEX_NAME)
-      return index
-
-  def upsert_vector(index, vector_id, vector, metadata):
-      index.upsert([(vector_id, vector, metadata)])
-
-  if __name__ == "__main__":
-      index = init_index()
-      print("Index initialized:", index)
+  def upsert_embeddings(index, embedded_chunks):
+      # Prepare vectors with IDs and metadata
+      vectors = []
+      for i, chunk in enumerate(embedded_chunks):
+          vectors.append({
+              'id': f"chunk_{i}",
+              'values': chunk.embedding,
+              'metadata': chunk.metadata
+          })
+      
+      # Upsert in batches
+      batch_size = 100
+      for i in range(0, len(vectors), batch_size):
+          batch = vectors[i:i + batch_size]
+          index.upsert(vectors=batch)
   ```
-- [ ] Test the connection by running:
-  ```bash
-  python src/vector_db.py
-  ```
+- [x] Test the connection and basic operations (Completed: Successfully connected and verified index)
+- [x] Implement batch upserting for efficiency (Completed: Implemented with batch size of 100)
+- [x] Add error handling and retries (Completed: Added retry logic with max 3 attempts)
+- [x] Verify data persistence (Completed: Successfully queried back upserted vectors)
 
-## Query Processing Pipeline
+## Query Processing Pipeline 🔄
 
 ### 6.1 Embed User Queries
 
@@ -284,10 +297,10 @@ This document provides a step-by-step guide to implement a conversational AI cha
 - [x] Project structure created with all required directories and files
 - [x] CSV data is successfully loaded using the ingestion pipeline
 - [x] External data fetching functions are implemented and tested
-- [ ] Text chunking function is implemented and returns correct chunks
-- [ ] Embedding generation function works correctly using OpenAI's API
-- [ ] Pinecone index (or your chosen vector DB) is initialized and tested
-- [ ] Data is successfully upserted into the vector database
+- [x] Text chunking function is implemented and returns correct chunks
+- [x] Embedding generation function works correctly using OpenAI's API
+- [x] Pinecone index (or your chosen vector DB) is initialized and tested
+- [x] Data is successfully upserted into the vector database
 - [ ] Query embedding and retrieval functions are working as expected
 - [ ] Prompt construction correctly integrates user queries and retrieved context
 - [ ] GPT-3.5-Turbo integration returns a valid response
