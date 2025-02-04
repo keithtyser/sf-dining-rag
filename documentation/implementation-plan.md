@@ -6,8 +6,8 @@ This document provides a step-by-step guide to implement a conversational AI cha
 
 1. [Environment Setup](#environment-setup) ✅
 2. [Project Structure Setup](#project-structure-setup) ✅
-3. [Data Ingestion Pipeline](#data-ingestion-pipeline) 🔄
-4. [Text Chunking and Embedding Generation](#text-chunking-and-embedding-generation)
+3. [Data Ingestion Pipeline](#data-ingestion-pipeline) ✅
+4. [Text Chunking and Embedding Generation](#text-chunking-and-embedding-generation) 🔄
 5. [Storing Embeddings in the Vector Database](#storing-embeddings-in-the-vector-database)
 6. [Query Processing Pipeline](#query-processing-pipeline)
 7. [LLM Integration and Prompt Engineering](#llm-integration-and-prompt-engineering)
@@ -63,7 +63,7 @@ This document provides a step-by-step guide to implement a conversational AI cha
   ```
   project/
   ├── data/
-  │   └── restaurant_data.csv
+  │   └── sample_restaurant_data.csv
   ├── src/
   │   ├── ingestion.py
   │   ├── chunking.py
@@ -83,9 +83,9 @@ This document provides a step-by-step guide to implement a conversational AI cha
   ```
 - [x] Create a .gitignore file to exclude your virtual environment folder and other temporary files.
 
-## Data Ingestion Pipeline 🔄
+## Data Ingestion Pipeline ✅
 
-### 3.1 Read the CSV File 🔄
+### 3.1 Read the CSV File ✅
 
 - [x] In "src/ingestion.py", write code to load the CSV file using Pandas:
   ```python
@@ -95,17 +95,17 @@ This document provides a step-by-step guide to implement a conversational AI cha
       return pd.read_csv(file_path)
 
   if __name__ == "__main__":
-      df = load_csv('../data/restaurant_data.csv')
+      df = load_csv('../data/sample_restaurant_data.csv')
       print(df.head())
   ```
-- [ ] Test by running:
+- [x] Test by running:
   ```bash
   python src/ingestion.py
   ```
 
-### 3.2 Fetch Unstructured Data (Optional)
+### 3.2 Fetch Unstructured Data (Optional) ✅
 
-- [x] In "src/ingestion.py" (or a separate module), add a function to fetch data from an external source:
+- [x] In "src/ingestion.py", add a function to fetch data from an external source:
   ```python
   import requests
 
@@ -116,9 +116,9 @@ This document provides a step-by-step guide to implement a conversational AI cha
           return response.json().get("extract", "")
       return ""
   ```
-- [ ] Test the function with a sample article title.
+- [x] Test the function with a sample article title (Completed: Successfully fetched and enriched data with cuisine descriptions)
 
-## Text Chunking and Embedding Generation
+## Text Chunking and Embedding Generation 🔄
 
 ### 4.1 Implement Text Chunking
 
@@ -282,8 +282,8 @@ This document provides a step-by-step guide to implement a conversational AI cha
 
 - [x] Environment setup completed (Python installed, virtual environment created, dependencies installed)
 - [x] Project structure created with all required directories and files
-- [ ] CSV data is successfully loaded using the ingestion pipeline
-- [ ] (Optional) External data fetching functions are implemented and tested
+- [x] CSV data is successfully loaded using the ingestion pipeline
+- [x] External data fetching functions are implemented and tested
 - [ ] Text chunking function is implemented and returns correct chunks
 - [ ] Embedding generation function works correctly using OpenAI's API
 - [ ] Pinecone index (or your chosen vector DB) is initialized and tested
