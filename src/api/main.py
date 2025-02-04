@@ -7,7 +7,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-from api.models import (
+from src.api.models import (
     QueryRequest,
     ChatRequest,
     QueryResponse,
@@ -20,9 +20,12 @@ from api.models import (
     RestaurantSearchResponse,
     MenuSection
 )
-from api.middleware import RequestLoggingMiddleware
-from query import get_similar_chunks
-from chat import generate_response, ConversationHistory
+from src.api.middleware import RequestLoggingMiddleware
+from src.query import get_similar_chunks
+from src.chat import generate_response, ConversationHistory
+from src.api.dependencies import get_openai_client, get_pinecone_index
+from src.embedding import generate_embedding, batch_generate_embeddings
+from src.vector_db import init_pinecone, upsert_embeddings, query_similar
 
 # API version and prefix
 API_VERSION = "1.0.0"
@@ -335,7 +338,7 @@ async def search_restaurants(request: Request, params: RestaurantSearchParams = 
             ).dict()
         )
 
-@app.get(f"{API_PREFIX}/restaurants/{restaurant_id}", response_model=RestaurantDetails, responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}})
+@app.get(f"{API_PREFIX}/restaurants/{{restaurant_id}}", response_model=RestaurantDetails, responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}})
 @limiter.limit("30/minute")
 async def get_restaurant_details(request: Request, restaurant_id: str):
     """

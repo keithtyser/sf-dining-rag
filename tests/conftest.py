@@ -1,11 +1,24 @@
 import os
 import pytest
+import asyncio
 from fastapi.testclient import TestClient
 from src.api.main import app
 
 # Test client fixture
+@pytest.fixture(autouse=True)
+def setup_test_environment():
+    """Set up test environment variables before each test"""
+    os.environ["OPENAI_API_KEY"] = "test-key"
+    os.environ["PINECONE_API_KEY"] = "test-key"
+    os.environ["PINECONE_ENVIRONMENT"] = "test-env"
+    yield
+    # Clean up after tests
+    os.environ.pop("OPENAI_API_KEY", None)
+    os.environ.pop("PINECONE_API_KEY", None)
+    os.environ.pop("PINECONE_ENVIRONMENT", None)
+
 @pytest.fixture
-def client():
+def test_client():
     """Create a test client for the FastAPI app"""
     return TestClient(app)
 
@@ -45,4 +58,10 @@ def pytest_configure(config):
     os.environ.setdefault("ENVIRONMENT", "test")
     os.environ.setdefault("OPENAI_API_KEY", "test_key")
     os.environ.setdefault("PINECONE_API_KEY", "test_key")
-    os.environ.setdefault("PINECONE_ENVIRONMENT", "test") 
+    os.environ.setdefault("PINECONE_ENVIRONMENT", "test")
+
+@pytest.fixture(scope="session")
+def event_loop():
+    loop = asyncio.get_event_loop()
+    yield loop
+    loop.close() 

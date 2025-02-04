@@ -5,77 +5,55 @@ from dataclasses import dataclass
 import numpy as np
 from tqdm import tqdm
 import time
+from dotenv import load_dotenv
 
-def load_api_key(file_path: str = '../api_key.txt') -> Optional[str]:
-    """
-    Load OpenAI API key from a text file
-    
-    Args:
-        file_path (str): Path to the API key file
-        
-    Returns:
-        Optional[str]: API key if found, None otherwise
-    """
-    try:
-        with open(file_path, 'r') as f:
-            return f.read().strip()
-    except Exception as e:
-        print(f"Error loading API key: {str(e)}")
-        return None
+# Load environment variables
+load_dotenv()
 
-# Initialize OpenAI client
-api_key = load_api_key()
+# Initialize OpenAI client with API key from environment variable
+api_key = os.getenv("OPENAI_API_KEY")
 if not api_key:
-    raise ValueError("OpenAI API key not found. Please create api_key.txt file with your API key.")
-    
+    raise ValueError("OpenAI API key not found in environment variables. Please set OPENAI_API_KEY.")
+
 client = OpenAI(api_key=api_key)
 
 @dataclass
 class EmbeddedChunk:
-    """Class to represent a chunk of text with its embedding and metadata"""
+    """Class to hold text chunk and its embedding"""
     text: str
     embedding: List[float]
     metadata: Dict[str, Any]
 
-def get_embedding(
-    text: str,
-    model: str = "text-embedding-ada-002",
-    max_retries: int = 3,
-    retry_delay: float = 1.0
-) -> Optional[List[float]]:
-    """
-    Generate an embedding for a piece of text using OpenAI's API
-    
-    Args:
-        text (str): Text to embed
-        model (str): OpenAI model to use for embedding
-        max_retries (int): Maximum number of retry attempts
-        retry_delay (float): Delay between retries in seconds
-        
-    Returns:
-        List[float]: Embedding vector if successful, None otherwise
-    """
-    if not text.strip():
+def generate_embedding(text: str) -> Optional[List[float]]:
+    """Get embedding for a single text using OpenAI's API"""
+    # Handle empty or whitespace-only input
+    if not text or not text.strip():
         return None
         
-    for attempt in range(max_retries):
-        try:
-            response = client.embeddings.create(
-                input=[text.strip()],
-                model=model
-            )
-            return response.data[0].embedding
-            
-        except Exception as e:
-            if attempt == max_retries - 1:  # Last attempt
-                print(f"Failed to generate embedding after {max_retries} attempts.")
-                print(f"Error: {str(e)}")
-                return None
-            print(f"Attempt {attempt + 1} failed. Retrying...")
-            time.sleep(retry_delay)
+    try:
+        response = client.embeddings.create(
+            model="text-embedding-ada-002",
+            input=text
+        )
+        return response.data[0].embedding
+    except Exception as e:
+        print(f"Error getting embedding: {e}")
+        raise
+
+def batch_generate_embeddings(texts: List[str]) -> List[List[float]]:
+    """Get embeddings for a batch of texts using OpenAI's API"""
+    try:
+        response = client.embeddings.create(
+            model="text-embedding-ada-002",
+            input=texts
+        )
+        return [data.embedding for data in response.data]
+    except Exception as e:
+        print(f"Error getting embeddings: {e}")
+        raise
 
 def embed_chunks(
-    chunks: List['TextChunk'],
+    chunks: List[Dict[str, Any]], 
     batch_size: int = 100,
     max_retries: int = 3
 ) -> List[EmbeddedChunk]:
@@ -83,29 +61,26 @@ def embed_chunks(
     Generate embeddings for a list of text chunks
     
     Args:
-        chunks (List[TextChunk]): List of text chunks to embed
-        batch_size (int): Number of chunks to process in each batch
-        max_retries (int): Maximum number of retry attempts per chunk
+        chunks (List[Dict[str, Any]]): List of chunks with text and metadata
+        batch_size (int): Number of chunks to process at once
+        max_retries (int): Maximum number of retry attempts
         
     Returns:
-        List[EmbeddedChunk]: List of chunks with their embeddings
+        List[EmbeddedChunk]: List of chunks with embeddings
     """
     embedded_chunks = []
     
-    # Process chunks in batches with progress bar
-    for i in tqdm(range(0, len(chunks), batch_size), desc="Generating embeddings"):
+    for i in tqdm(range(0, len(chunks), batch_size)):
         batch = chunks[i:i + batch_size]
         
         for chunk in batch:
-            embedding = get_embedding(chunk.text, max_retries=max_retries)
+            embedding = generate_embedding(chunk["text"])
             if embedding:
                 embedded_chunks.append(EmbeddedChunk(
-                    text=chunk.text,
+                    text=chunk["text"],
                     embedding=embedding,
-                    metadata=chunk.metadata
+                    metadata=chunk["metadata"]
                 ))
-            else:
-                print(f"Warning: Failed to generate embedding for chunk: {chunk.text[:100]}...")
     
     return embedded_chunks
 
@@ -131,31 +106,31 @@ def save_embeddings(embedded_chunks: List[EmbeddedChunk], output_file: str) -> N
     )
     print(f"Saved {len(embedded_chunks)} embeddings to {output_file}")
 
-def load_embeddings(input_file: str) -> List[EmbeddedChunk]:
+def load_embeddings(file_path: str) -> List[EmbeddedChunk]:
     """
-    Load embeddings and their metadata from a numpy file
+    Load pre-computed embeddings from a numpy file
     
     Args:
-        input_file (str): Path to the embeddings file
+        file_path (str): Path to the .npz file containing embeddings
         
     Returns:
-        List[EmbeddedChunk]: List of embedded chunks
+        List[EmbeddedChunk]: List of chunks with embeddings
     """
-    # Load from file
-    data = np.load(input_file, allow_pickle=True)
-    
-    # Convert back to EmbeddedChunk objects
-    embedded_chunks = [
-        EmbeddedChunk(text=text, embedding=embedding, metadata=metadata)
-        for text, embedding, metadata in zip(
-            data['texts'],
-            data['embeddings'],
-            data['metadata']
-        )
-    ]
-    
-    print(f"Loaded {len(embedded_chunks)} embeddings from {input_file}")
-    return embedded_chunks
+    try:
+        data = np.load(file_path, allow_pickle=True)
+        chunks = []
+        
+        for text, embedding, metadata in zip(data['texts'], data['embeddings'], data['metadata']):
+            chunks.append(EmbeddedChunk(
+                text=text,
+                embedding=embedding.tolist(),
+                metadata=metadata.item()
+            ))
+            
+        return chunks
+    except Exception as e:
+        print(f"Error loading embeddings: {str(e)}")
+        return []
 
 if __name__ == "__main__":
     # Test the embedding functionality

@@ -1,12 +1,13 @@
 import os
+import numpy as np
 from typing import List, Dict, Any, Optional
-from pinecone import Pinecone, ServerlessSpec
+from dotenv import load_dotenv
+import pinecone
 from tqdm import tqdm
+from src.embedding import EmbeddedChunk, load_embeddings
 import time
 from dataclasses import dataclass
-from embedding import EmbeddedChunk, load_embeddings
-from dotenv import load_dotenv
-import numpy as np
+from pinecone import Pinecone, ServerlessSpec
 
 # Load environment variables
 load_dotenv(override=True)  # Force reload of environment variables

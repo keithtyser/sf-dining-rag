@@ -1,8 +1,10 @@
 import os
 from typing import List, Dict, Any, Optional
+from dataclasses import dataclass
 from dotenv import load_dotenv
 from openai import OpenAI
-from query import get_similar_chunks, format_results
+from src.query import get_similar_chunks, format_results
+from src.embedding import generate_embedding
 
 # Load environment variables
 load_dotenv(override=True)

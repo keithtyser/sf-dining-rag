@@ -1,8 +1,10 @@
 import os
 from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
-from embedding import get_embedding
-from vector_db import init_pinecone, query_similar, convert_to_native_types
+import numpy as np
+from pinecone import Index
+from src.embedding import generate_embedding
+from src.vector_db import init_pinecone, query_similar, convert_to_native_types
 
 # Load environment variables
 load_dotenv(override=True)
@@ -24,7 +26,7 @@ def embed_query(query: str) -> Optional[List[float]]:
             return None
             
         # Generate embedding
-        embedding = get_embedding(query.strip())
+        embedding = generate_embedding(query.strip())
         if embedding:
             # Convert to native Python types for Pinecone
             return convert_to_native_types(embedding)
