@@ -3,7 +3,7 @@
 import pandas as pd
 import requests
 import os
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 
 def load_csv(file_path: str) -> pd.DataFrame:
     """
@@ -26,7 +26,7 @@ def load_csv(file_path: str) -> pd.DataFrame:
         # Try to read the file
         print(f"Attempting to read file: {file_path}")
         df = pd.read_csv(file_path)
-        print(f"Successfully loaded {len(df)} restaurants from {file_path}")
+        print(f"Successfully loaded {len(df)} records from {file_path}")
         return df
     except FileNotFoundError as e:
         print(f"FileNotFoundError: {str(e)}")
@@ -37,6 +37,66 @@ def load_csv(file_path: str) -> pd.DataFrame:
         print(f"Error loading CSV: {str(e)}")
         print(f"Error type: {type(e)}")
         return pd.DataFrame()
+
+def clean_value(value) -> str:
+    """
+    clean and convert a value to string, handling nan values
+    
+    args:
+        value: any value that needs to be cleaned
+        
+    returns:
+        str: cleaned string value
+    """
+    if pd.isna(value):
+        return ""
+    return str(value).strip()
+
+def organize_restaurant_data(df: pd.DataFrame) -> Dict:
+    """
+    organize the flat csv data into a hierarchical structure
+    
+    args:
+        df (pandas.DataFrame): raw restaurant data
+        
+    returns:
+        dict: organized restaurant data with menus and ingredients
+    """
+    restaurants = {}
+    
+    # Group by restaurant first
+    for restaurant_name in df['restaurant_name'].unique():
+        restaurant_df = df[df['restaurant_name'] == restaurant_name]
+        
+        # Get restaurant info from first row
+        first_row = restaurant_df.iloc[0]
+        restaurants[restaurant_name] = {
+            'rating': first_row.get('rating', None),
+            'price_range': clean_value(first_row.get('price_range', None)),
+            'menu_categories': {}
+        }
+        
+        # Group by menu category
+        for category in restaurant_df['menu_category'].unique():
+            category_df = restaurant_df[restaurant_df['menu_category'] == category]
+            
+            menu_items = []
+            for _, item in category_df.groupby('item_id').first().iterrows():
+                # Get ingredients for this item
+                ingredients = category_df[
+                    category_df['item_id'] == item.name
+                ]['ingredient_name'].dropna().unique().tolist()
+                
+                menu_items.append({
+                    'item_name': clean_value(item['menu_item']),
+                    'description': clean_value(item['menu_description']),
+                    'ingredients': [clean_value(i) for i in ingredients if pd.notna(i)],
+                    'co2_emission': item.get('co2_emission', None)
+                })
+            
+            restaurants[restaurant_name]['menu_categories'][clean_value(category)] = menu_items
+    
+    return restaurants
 
 def fetch_wikipedia_article(title: str) -> Optional[Dict]:
     """
@@ -71,37 +131,22 @@ def fetch_wikipedia_article(title: str) -> Optional[Dict]:
         print(f"Error type: {type(e)}")
         return None
 
-def enrich_restaurant_data(df: pd.DataFrame) -> pd.DataFrame:
+def get_unique_ingredients(restaurants: Dict) -> List[str]:
     """
-    enrich restaurant data with wikipedia information about cuisines
+    extract all unique ingredients from the restaurant data
     
     args:
-        df (pandas.DataFrame): restaurant data
+        restaurants (dict): organized restaurant data
         
     returns:
-        pandas.DataFrame: enriched data with cuisine descriptions
+        list: unique ingredients across all restaurants
     """
-    # Get unique cuisines
-    cuisines = df['cuisine'].unique()
-    print(f"\nFound {len(cuisines)} unique cuisines: {', '.join(cuisines)}")
-    
-    # Fetch Wikipedia info for each cuisine
-    cuisine_info = {}
-    for cuisine in cuisines:
-        print(f"\nProcessing {cuisine} cuisine...")
-        wiki_data = fetch_wikipedia_article(f"{cuisine}_cuisine")
-        if wiki_data:
-            cuisine_info[cuisine] = wiki_data['extract']
-            print(f"✓ Found Wikipedia information for {cuisine} cuisine")
-            print(f"Extract preview: {wiki_data['extract'][:100]}...")
-        else:
-            print(f"✗ Could not find Wikipedia information for {cuisine} cuisine")
-    
-    # Add cuisine descriptions to the dataframe
-    df['cuisine_description'] = df['cuisine'].map(cuisine_info)
-    print(f"\nAdded cuisine descriptions to {sum(df['cuisine_description'].notna())} restaurants")
-    
-    return df
+    ingredients = set()
+    for restaurant in restaurants.values():
+        for category in restaurant['menu_categories'].values():
+            for item in category:
+                ingredients.update(i for i in item['ingredients'] if i)  # Only add non-empty ingredients
+    return sorted(list(ingredients))
 
 if __name__ == "__main__":
     print("\n=== Starting Restaurant Data Processing ===")
@@ -114,22 +159,38 @@ if __name__ == "__main__":
     if not df.empty:
         # Display basic information about the dataset
         print("\n=== Dataset Information ===")
-        print(f"Number of restaurants: {len(df)}")
-        print(f"Cuisines available: {', '.join(df['cuisine'].unique())}")
-        print(f"Price ranges: {', '.join(df['price_range'].unique())}")
-        print("\n=== Sample Restaurant Data ===")
-        print(df[['name', 'cuisine', 'price_range', 'rating']].head())
+        print(f"Number of records: {len(df)}")
+        print(f"Number of unique restaurants: {df['restaurant_name'].nunique()}")
+        print(f"Number of menu categories: {df['menu_category'].nunique()}")
+        print(f"Number of unique menu items: {df['item_id'].nunique()}")
         
-        # Enrich data with Wikipedia information
-        print("\n=== Enriching Data with Wikipedia Information ===")
-        df = enrich_restaurant_data(df)
+        # Organize data hierarchically
+        print("\n=== Organizing Data ===")
+        restaurants = organize_restaurant_data(df)
         
-        # Display enriched data
-        print("\n=== Sample Enriched Data ===")
-        if 'cuisine_description' in df.columns:
-            for _, row in df.head(2).iterrows():
-                print(f"\nRestaurant: {row['name']}")
-                print(f"Cuisine: {row['cuisine']}")
-                print(f"Description: {row['cuisine_description'][:200]}..." if row['cuisine_description'] else "No cuisine description available")
+        # Display sample of organized data
+        print("\n=== Sample Organized Data ===")
+        sample_restaurant = next(iter(restaurants))
+        print(f"\nSample Restaurant: {sample_restaurant}")
+        print(f"Rating: {restaurants[sample_restaurant]['rating']}")
+        print(f"Price Range: {restaurants[sample_restaurant]['price_range']}")
+        print("\nMenu Categories:")
+        for category, items in list(restaurants[sample_restaurant]['menu_categories'].items())[:2]:
+            print(f"\n  {category}:")
+            for item in items[:2]:  # Show first 2 items in each category
+                print(f"    - {item['item_name']}")
+                if item['description']:
+                    print(f"      Description: {item['description'][:100]}...")
+                if item['ingredients']:
+                    print(f"      Ingredients: {', '.join(item['ingredients'])}")
+                if item['co2_emission']:
+                    print(f"      CO2 Emission: {item['co2_emission']}")
+        
+        # Get unique ingredients
+        print("\n=== Ingredient Analysis ===")
+        ingredients = get_unique_ingredients(restaurants)
+        print(f"Total unique ingredients: {len(ingredients)}")
+        print("Sample ingredients:", ', '.join(ingredients[:10]))
+        
     else:
         print("\nError: No data was loaded. Please check the error messages above.")
