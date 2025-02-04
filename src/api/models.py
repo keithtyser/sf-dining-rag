@@ -18,8 +18,10 @@ class QueryResponse(BaseModel):
 
 class ChatRequest(BaseModel):
     """Request model for chat interactions"""
-    query: str = Field(..., min_length=1, description="The user's message")
-    conversation_id: Optional[str] = Field(None, description="Unique identifier for the conversation")
+    query: str = Field(..., min_length=1, description="User's query text")
+    conversation_id: Optional[str] = Field(None, description="ID of the conversation")
+    context_window_size: Optional[int] = Field(5, ge=1, le=10, description="Number of recent messages to include")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata for the conversation")
 
 class RestaurantInfo(BaseModel):
     """Model for restaurant information"""
@@ -39,6 +41,7 @@ class ChatResponse(BaseModel):
     """Response model for chat interactions"""
     response: str = Field(..., description="Generated response text")
     conversation_id: str = Field(..., description="ID of the conversation")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata about the response")
 
 class ErrorResponse(BaseModel):
     """Model for error responses"""
@@ -106,29 +109,28 @@ class RestaurantSearchParams(BaseModel):
     sort_by: Optional[str] = Field("relevance", description="Sort results by: relevance, rating, or name")
     sort_order: Optional[str] = Field("desc", description="Sort order: asc or desc")
 
-class MenuSection(BaseModel):
-    """Model for a menu section"""
-    name: str = Field(..., description="Name of the menu section")
-    items: List[MenuItem] = Field(default_factory=list, description="List of menu items in this section")
+class ConversationMetadata(BaseModel):
+    """Model for conversation metadata"""
+    created_at: float = Field(..., description="Timestamp when the conversation was created")
+    last_updated: float = Field(..., description="Timestamp when the conversation was last updated")
+    message_count: int = Field(..., description="Number of messages in the conversation")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata about the conversation")
 
-class RestaurantDetails(BaseModel):
-    """Detailed restaurant information model"""
-    id: str = Field(..., description="Unique identifier for the restaurant")
-    name: str = Field(..., description="Name of the restaurant")
-    rating: Optional[float] = Field(None, description="Restaurant rating")
-    price_range: Optional[str] = Field(None, description="Price range indicator")
-    cuisine_type: Optional[str] = Field(None, description="Type of cuisine")
-    description: Optional[str] = Field(None, description="Restaurant description")
-    menu_sections: List[MenuSection] = Field(default_factory=list, description="Menu sections with items")
-    popular_items: List[MenuItem] = Field(default_factory=list, description="Popular menu items")
-    relevance_score: Optional[float] = Field(None, description="Search relevance score")
-    location: Optional[str] = Field(None, description="Restaurant location")
-    popular_dishes: Optional[List[str]] = Field(None, description="List of popular dishes")
+class Message(BaseModel):
+    """Model for chat messages"""
+    role: str = Field(..., description="Role of the message sender (user/assistant)")
+    content: str = Field(..., description="Content of the message")
+    timestamp: float = Field(..., description="Timestamp when the message was sent")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata about the message")
 
-class RestaurantSearchResponse(BaseModel):
-    """Response model for restaurant search"""
-    restaurants: List[RestaurantDetails] = Field(default_factory=list, description="List of matching restaurants")
-    total_results: int = Field(..., description="Total number of matching restaurants")
-    page: int = Field(..., description="Current page number")
-    page_size: int = Field(..., description="Number of results per page")
-    total_pages: int = Field(..., description="Total number of pages available") 
+class Conversation(BaseModel):
+    """Model for complete conversations"""
+    id: str = Field(..., description="Unique identifier for the conversation")
+    messages: List[Message] = Field(default_factory=list, description="List of messages in the conversation")
+    metadata: ConversationMetadata = Field(..., description="Metadata about the conversation")
+
+class ConversationListResponse(BaseModel):
+    """Response model for listing conversations"""
+    conversations: List[Conversation] = Field(..., description="List of conversations")
+    total_count: int = Field(..., description="Total number of conversations")
+    has_more: bool = Field(..., description="Whether there are more conversations available") 

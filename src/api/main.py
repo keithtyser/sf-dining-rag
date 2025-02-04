@@ -1,6 +1,6 @@
 import uuid
 import math
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from fastapi import FastAPI, HTTPException, Query, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -25,7 +25,8 @@ from src.api.models import (
 )
 from src.api.middleware import RequestLoggingMiddleware, setup_middleware
 from src.query import get_similar_chunks
-from src.chat import generate_response, ConversationHistory
+from src.chat import generate_response
+from src.conversation import ConversationManager
 from src.api.dependencies import get_openai_client, get_pinecone_index
 from src.embedding import batch_generate_embeddings, get_embedding
 from src.vector_db import init_pinecone, upsert_embeddings, query_similar
@@ -68,7 +69,7 @@ app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(GZipMiddleware, minimum_size=1000)  # Only compress responses larger than 1KB
 
 # Store conversation histories
-conversations: Dict[str, ConversationHistory] = {}
+conversation_manager = ConversationManager()
 
 @app.get(f"{API_PREFIX}/health")
 @limiter.limit("60/minute")
@@ -115,15 +116,10 @@ async def chat_completion(
 ):
     """Generate chat response"""
     try:
-        # Get or create conversation history
-        conversation_id = chat_request.conversation_id or str(len(conversations))
-        if conversation_id not in conversations:
-            conversations[conversation_id] = ConversationHistory()
-        
-        # Generate response
+        # Generate response using conversation manager
         response = generate_response(
             query=chat_request.query,
-            conversation_history=conversations[conversation_id],
+            conversation_id=chat_request.conversation_id or str(uuid.uuid4()),
             client=openai_client,
             get_similar_chunks=get_similar_chunks
         )
@@ -131,13 +127,9 @@ async def chat_completion(
         if not response:
             raise Exception("Failed to generate response")
             
-        # Add to conversation history
-        conversations[conversation_id].add_message("user", chat_request.query)
-        conversations[conversation_id].add_message("assistant", response)
-        
         return ChatResponse(
             response=response,
-            conversation_id=conversation_id
+            conversation_id=chat_request.conversation_id
         )
         
     except Exception as e:
@@ -145,6 +137,44 @@ async def chat_completion(
             status_code=500,
             detail={
                 "error": "Chat completion failed",
+                "message": str(e)
+            }
+        )
+
+@app.get(f"{API_PREFIX}/conversations/recent", response_model=List[Dict[str, Any]])
+@limiter.limit("60/minute")
+async def get_recent_conversations(
+    request: Request,
+    limit: int = Query(10, ge=1, le=50)
+):
+    """Get recent conversations"""
+    try:
+        conversations = conversation_manager.get_recent_conversations(limit=limit)
+        return [conv.to_dict() for conv in conversations]
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Failed to fetch recent conversations",
+                "message": str(e)
+            }
+        )
+
+@app.delete(f"{API_PREFIX}/conversations/cleanup")
+@limiter.limit("10/minute")
+async def cleanup_old_conversations(
+    request: Request,
+    days_old: int = Query(30, ge=1)
+):
+    """Clean up old conversations"""
+    try:
+        conversation_manager.cleanup_old_conversations(days_old=days_old)
+        return {"status": "success", "message": f"Cleaned up conversations older than {days_old} days"}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Failed to clean up conversations",
                 "message": str(e)
             }
         )
