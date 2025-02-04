@@ -1,22 +1,19 @@
 import time
 import logging
-from typing import Callable
-from fastapi import Request, Response
+from fastapi import FastAPI, Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.types import ASGIApp
+from typing import Callable
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+# Set up logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("restaurant_api")
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
     """Middleware for logging request and response information"""
-    
-    def __init__(self, app: ASGIApp):
-        super().__init__(app)
     
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         # Start timer
@@ -52,3 +49,21 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
                 f"Error: {str(e)}"
             )
             raise 
+
+def setup_middleware(app: FastAPI):
+    """Set up all middleware for the application"""
+    # Add request logging
+    app.add_middleware(RequestLoggingMiddleware)
+    
+    # Add rate limiting
+    limiter = Limiter(key_func=get_remote_address)
+    app.state.limiter = limiter
+    app.add_middleware(SlowAPIMiddleware)
+    
+    @app.exception_handler(RateLimitExceeded)
+    async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+        return Response(
+            status_code=429,
+            content={"error": "Rate limit exceeded", "message": str(exc)},
+            media_type="application/json"
+        ) 

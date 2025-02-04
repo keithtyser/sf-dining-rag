@@ -1,19 +1,25 @@
 from typing import List, Dict, Any, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 
 class QueryRequest(BaseModel):
     """Request model for simple queries"""
-    query: str = Field(..., description="The user's query text")
-    top_k: Optional[int] = Field(3, description="Number of similar results to return")
-    score_threshold: Optional[float] = Field(0.7, description="Minimum similarity score to include in results")
+    query: str = Field(..., min_length=1, description="The search query")
+
+class QueryResult(BaseModel):
+    restaurant: str
+    rating: str
+    price_range: str
+    description: str
+    score: float
+
+class QueryResponse(BaseModel):
+    """Response model for queries"""
+    results: List[QueryResult]
 
 class ChatRequest(BaseModel):
     """Request model for chat interactions"""
-    query: str = Field(..., description="The user's query text")
-    conversation_id: Optional[str] = Field(None, description="ID of the conversation to continue")
-    model: Optional[str] = Field("gpt-4-turbo-preview", description="OpenAI model to use")
-    temperature: Optional[float] = Field(0.7, description="Response creativity (0.0 to 1.0)")
-    max_tokens: Optional[int] = Field(500, description="Maximum response length")
+    query: str = Field(..., min_length=1, description="The user's message")
+    conversation_id: Optional[str] = Field(None, description="Unique identifier for the conversation")
 
 class RestaurantInfo(BaseModel):
     """Model for restaurant information"""
@@ -29,23 +35,65 @@ class MenuItem(BaseModel):
     category: Optional[str] = Field(None, description="Category of the menu item")
     relevance_score: float = Field(..., description="Relevance score from vector search")
 
-class QueryResponse(BaseModel):
-    """Response model for queries"""
-    restaurants: List[RestaurantInfo] = Field(default_factory=list, description="List of relevant restaurants")
-    menu_items: List[MenuItem] = Field(default_factory=list, description="List of relevant menu items")
-    total_results: int = Field(..., description="Total number of results found")
-
 class ChatResponse(BaseModel):
     """Response model for chat interactions"""
     response: str = Field(..., description="Generated response text")
     conversation_id: str = Field(..., description="ID of the conversation")
-    context: QueryResponse = Field(..., description="Context information used for the response")
 
 class ErrorResponse(BaseModel):
     """Model for error responses"""
     error: str = Field(..., description="Error message")
-    code: str = Field(..., description="Error code")
-    details: Optional[Dict[str, Any]] = Field(None, description="Additional error details")
+    message: str = Field(..., description="Error message")
+    details: Optional[dict] = Field(None, description="Additional error details")
+
+class RestaurantSearchRequest(BaseModel):
+    """Parameters for searching restaurants"""
+    query: Optional[str] = Field(None, description="Search query for restaurants")
+    price_range: Optional[str] = Field(None, description="Price range filter (e.g., $, $$, $$$)")
+    min_rating: Optional[float] = Field(None, ge=0, le=5, description="Minimum rating filter")
+    page: int = Field(1, ge=1, description="Page number for pagination")
+    page_size: int = Field(10, ge=1, le=50, description="Number of results per page")
+    
+    @validator("price_range")
+    def validate_price_range(cls, v):
+        if v is not None and not all(c == "$" for c in v):
+            raise ValueError("Price range must contain only $ symbols")
+        return v
+
+class Restaurant(BaseModel):
+    """Model for a restaurant"""
+    id: str = Field(..., description="Unique identifier for the restaurant")
+    name: str = Field(..., description="Name of the restaurant")
+    rating: float = Field(..., description="Restaurant rating")
+    price_range: str = Field(..., description="Price range indicator")
+    description: str = Field(..., description="Restaurant description")
+    cuisine_type: Optional[str] = Field(None, description="Type of cuisine")
+    location: Optional[str] = Field(None, description="Restaurant location")
+    popular_dishes: Optional[List[str]] = Field(None, description="List of popular dishes")
+
+class RestaurantDetails(BaseModel):
+    """Restaurant details model"""
+    id: str
+    name: str
+    rating: float
+    price_range: str
+    description: str
+    cuisine_type: str
+    location: str
+    popular_dishes: List[str]
+
+class RestaurantSearchResponse(BaseModel):
+    """Response model for restaurant search"""
+    restaurants: List[RestaurantDetails]
+    total_results: int
+    total_pages: int
+    page: int
+    page_size: int
+
+class MenuSection(BaseModel):
+    """Model for a menu section"""
+    name: str = Field(..., description="Name of the menu section")
+    items: List[MenuItem] = Field(default_factory=list, description="List of menu items in this section")
 
 class RestaurantSearchParams(BaseModel):
     """Parameters for searching restaurants"""
@@ -74,6 +122,8 @@ class RestaurantDetails(BaseModel):
     menu_sections: List[MenuSection] = Field(default_factory=list, description="Menu sections with items")
     popular_items: List[MenuItem] = Field(default_factory=list, description="Popular menu items")
     relevance_score: Optional[float] = Field(None, description="Search relevance score")
+    location: Optional[str] = Field(None, description="Restaurant location")
+    popular_dishes: Optional[List[str]] = Field(None, description="List of popular dishes")
 
 class RestaurantSearchResponse(BaseModel):
     """Response model for restaurant search"""

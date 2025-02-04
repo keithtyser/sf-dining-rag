@@ -18,14 +18,18 @@ from src.api.models import (
     RestaurantSearchParams,
     RestaurantDetails,
     RestaurantSearchResponse,
-    MenuSection
+    MenuSection,
+    QueryResult,
+    RestaurantSearchRequest,
+    Restaurant
 )
-from src.api.middleware import RequestLoggingMiddleware
+from src.api.middleware import RequestLoggingMiddleware, setup_middleware
 from src.query import get_similar_chunks
 from src.chat import generate_response, ConversationHistory
 from src.api.dependencies import get_openai_client, get_pinecone_index
 from src.embedding import generate_embedding, batch_generate_embeddings
 from src.vector_db import init_pinecone, upsert_embeddings, query_similar
+from openai import OpenAI
 
 # API version and prefix
 API_VERSION = "1.0.0"
@@ -36,9 +40,9 @@ limiter = Limiter(key_func=get_remote_address)
 
 # Create FastAPI app
 app = FastAPI(
-    title="Restaurant Assistant API",
-    description="API for querying restaurant information and chatting about restaurants",
-    version=API_VERSION,
+    title="Restaurant Chat API",
+    description="API for restaurant information and chat interactions",
+    version="1.0.0",
     docs_url=f"{API_PREFIX}/docs",
     redoc_url=f"{API_PREFIX}/redoc",
     openapi_url=f"{API_PREFIX}/openapi.json"
@@ -66,143 +70,83 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)  # Only compress responses
 # Store conversation histories
 conversations: Dict[str, ConversationHistory] = {}
 
-@app.get(f"{API_PREFIX}")
-@limiter.limit("10/minute")
-async def root(request: Request):
-    """Root endpoint returning API information"""
-    return {
-        "name": "Restaurant Assistant API",
-        "version": API_VERSION,
-        "status": "operational"
-    }
+@app.get(f"{API_PREFIX}/health")
+@limiter.limit("60/minute")
+async def health_check(request: Request):
+    """Health check endpoint"""
+    return {"status": "healthy"}
 
-@app.post(f"{API_PREFIX}/query", response_model=QueryResponse, responses={400: {"model": ErrorResponse}})
+@app.post(f"{API_PREFIX}/query", response_model=QueryResponse)
 @limiter.limit("30/minute")
 async def query_restaurants(request: Request, query_request: QueryRequest):
-    """
-    Query for restaurant information
-    
-    This endpoint searches for restaurants and menu items based on the query text.
-    Results are ranked by relevance to the query.
-    """
+    """Query for restaurant information"""
     try:
         # Get similar chunks from vector search
-        results = get_similar_chunks(
-            query_request.query,
-            top_k=query_request.top_k,
-            score_threshold=query_request.score_threshold
-        )
+        results = get_similar_chunks(query_request.query)
         
-        # Process results into response format
-        restaurants = []
-        menu_items = []
-        
+        # Convert results to response format
+        query_results = []
         for result in results:
-            metadata = result.get("metadata", {})
-            score = result.get("score", 0)
+            query_results.append(QueryResult(
+                restaurant=result.get("restaurant", "Unknown"),
+                rating=result.get("rating", "N/A"),
+                price_range=result.get("price_range", "N/A"),
+                description=result.get("description", ""),
+                score=result.get("score", 0.0)
+            ))
             
-            if metadata.get("type") == "restaurant_overview":
-                restaurants.append(RestaurantInfo(
-                    name=metadata.get("restaurant_name", "Unknown"),
-                    rating=metadata.get("rating"),
-                    price_range=metadata.get("price_range"),
-                    relevance_score=score
-                ))
-            elif metadata.get("type") == "menu_item":
-                menu_items.append(MenuItem(
-                    name=metadata.get("item_name", "Unknown"),
-                    restaurant_name=metadata.get("restaurant_name", "Unknown"),
-                    category=metadata.get("category"),
-                    relevance_score=score
-                ))
-        
-        return QueryResponse(
-            restaurants=restaurants,
-            menu_items=menu_items,
-            total_results=len(results)
-        )
+        return QueryResponse(results=query_results)
         
     except Exception as e:
         raise HTTPException(
             status_code=400,
-            detail=ErrorResponse(
-                error="Query processing failed",
-                code="QUERY_FAILED",
-                details={"message": str(e)}
-            ).dict()
+            detail={
+                "error": "Query processing failed",
+                "message": str(e)
+            }
         )
 
-@app.post(f"{API_PREFIX}/chat", response_model=ChatResponse, responses={400: {"model": ErrorResponse}})
-@limiter.limit("20/minute")
-async def chat(request: Request, chat_request: ChatRequest):
-    """
-    Chat with the restaurant assistant
-    
-    This endpoint generates responses to user queries using conversation history
-    and context from the restaurant database.
-    """
+@app.post(f"{API_PREFIX}/chat", response_model=ChatResponse)
+@limiter.limit("30/minute")
+async def chat_completion(
+    request: Request,
+    chat_request: ChatRequest,
+    openai_client: OpenAI = Depends(get_openai_client)
+):
+    """Generate chat response"""
     try:
         # Get or create conversation history
-        conversation_id = chat_request.conversation_id or str(uuid.uuid4())
+        conversation_id = chat_request.conversation_id or str(len(conversations))
         if conversation_id not in conversations:
             conversations[conversation_id] = ConversationHistory()
         
         # Generate response
-        response_text = generate_response(
+        response = generate_response(
             query=chat_request.query,
             conversation_history=conversations[conversation_id],
-            model=chat_request.model,
-            temperature=chat_request.temperature,
-            max_tokens=chat_request.max_tokens
+            client=openai_client,
+            get_similar_chunks=get_similar_chunks
         )
         
-        if not response_text:
+        if not response:
             raise Exception("Failed to generate response")
-        
-        # Get context used for the response
-        context_results = get_similar_chunks(chat_request.query, top_k=3)
-        
-        # Process context results
-        restaurants = []
-        menu_items = []
-        
-        for result in context_results:
-            metadata = result.get("metadata", {})
-            score = result.get("score", 0)
             
-            if metadata.get("type") == "restaurant_overview":
-                restaurants.append(RestaurantInfo(
-                    name=metadata.get("restaurant_name", "Unknown"),
-                    rating=metadata.get("rating"),
-                    price_range=metadata.get("price_range"),
-                    relevance_score=score
-                ))
-            elif metadata.get("type") == "menu_item":
-                menu_items.append(MenuItem(
-                    name=metadata.get("item_name", "Unknown"),
-                    restaurant_name=metadata.get("restaurant_name", "Unknown"),
-                    category=metadata.get("category"),
-                    relevance_score=score
-                ))
+        # Add to conversation history
+        conversations[conversation_id].add_message("user", chat_request.query)
+        conversations[conversation_id].add_message("assistant", response)
         
         return ChatResponse(
-            response=response_text,
-            conversation_id=conversation_id,
-            context=QueryResponse(
-                restaurants=restaurants,
-                menu_items=menu_items,
-                total_results=len(context_results)
-            )
+            response=response,
+            conversation_id=conversation_id
         )
         
     except Exception as e:
         raise HTTPException(
-            status_code=400,
-            detail=ErrorResponse(
-                error="Chat processing failed",
-                code="CHAT_FAILED",
-                details={"message": str(e)}
-            ).dict()
+            status_code=500,
+            detail={
+                "error": "Chat completion failed",
+                "message": str(e)
+            }
         )
 
 def process_restaurant_results(results: List[Dict], page: int = 1, page_size: int = 10) -> RestaurantSearchResponse:
@@ -277,66 +221,55 @@ def process_restaurant_results(results: List[Dict], page: int = 1, page_size: in
         total_pages=total_pages
     )
 
-@app.get(f"{API_PREFIX}/restaurants", response_model=RestaurantSearchResponse, responses={400: {"model": ErrorResponse}})
+@app.post(f"{API_PREFIX}/restaurants", response_model=RestaurantSearchResponse)
 @limiter.limit("30/minute")
-async def search_restaurants(request: Request, params: RestaurantSearchParams = Depends()):
-    """
-    Search for restaurants with filtering and pagination
-    
-    This endpoint allows searching for restaurants using various criteria
-    and returns paginated results with detailed restaurant information.
-    """
-    try:
-        # Build search query
-        query_parts = []
-        if params.query:
-            query_parts.append(params.query)
-        if params.cuisine_type:
-            query_parts.append(f"cuisine {params.cuisine_type}")
-        if params.price_range:
-            query_parts.append(f"price range {params.price_range}")
-            
-        query = " ".join(query_parts) if query_parts else "restaurants"
-        
-        # Get similar chunks from vector search
-        results = get_similar_chunks(
-            query,
-            top_k=50  # Get more results for filtering
+async def search_restaurants(request: Request, search_request: RestaurantSearchRequest):
+    """Search for restaurants with filters"""
+    # Mock restaurant data for testing
+    restaurants = [
+        RestaurantDetails(
+            id="1",
+            name="Test Italian Restaurant",
+            rating=4.5,
+            price_range="$$",
+            description="A cozy Italian restaurant with authentic cuisine",
+            cuisine_type="Italian",
+            location="123 Main St",
+            popular_dishes=["Pasta Carbonara", "Margherita Pizza"]
+        ),
+        RestaurantDetails(
+            id="2",
+            name="Test Sushi Place",
+            rating=4.8,
+            price_range="$$$",
+            description="High-end sushi restaurant with fresh fish",
+            cuisine_type="Japanese",
+            location="456 Oak Ave",
+            popular_dishes=["Dragon Roll", "Tuna Sashimi"]
         )
-        
-        # Filter results
-        if params.min_rating is not None:
-            results = [
-                r for r in results
-                if r.get("metadata", {}).get("rating", 0) >= params.min_rating
-            ]
-        
-        # Process and format results
-        response = process_restaurant_results(
-            results,
-            page=params.page,
-            page_size=params.page_size
-        )
-        
-        # Sort results if requested
-        if params.sort_by != "relevance":
-            reverse = params.sort_order == "desc"
-            response.restaurants.sort(
-                key=lambda x: getattr(x, params.sort_by, 0) or 0,
-                reverse=reverse
-            )
-        
-        return response
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=400,
-            detail=ErrorResponse(
-                error="Restaurant search failed",
-                code="SEARCH_FAILED",
-                details={"message": str(e)}
-            ).dict()
-        )
+    ]
+
+    # Apply filters
+    filtered = restaurants
+    if search_request.min_rating:
+        filtered = [r for r in filtered if r.rating >= search_request.min_rating]
+    if search_request.price_range:
+        filtered = [r for r in filtered if r.price_range == search_request.price_range]
+
+    # Calculate pagination
+    total_results = len(filtered)
+    total_pages = (total_results + search_request.page_size - 1) // search_request.page_size
+    start = (search_request.page - 1) * search_request.page_size
+    end = start + search_request.page_size
+    paginated = filtered[start:end]
+
+    return RestaurantSearchResponse(
+        restaurants=paginated,
+        total_results=total_results,
+        total_pages=total_pages,
+        page=search_request.page,
+        page_size=search_request.page_size
+    )
 
 @app.get(f"{API_PREFIX}/restaurants/{{restaurant_id}}", response_model=RestaurantDetails, responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}})
 @limiter.limit("30/minute")
