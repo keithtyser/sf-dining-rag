@@ -27,7 +27,7 @@ from src.api.middleware import RequestLoggingMiddleware, setup_middleware
 from src.query import get_similar_chunks
 from src.chat import generate_response, ConversationHistory
 from src.api.dependencies import get_openai_client, get_pinecone_index
-from src.embedding import generate_embedding, batch_generate_embeddings
+from src.embedding import batch_generate_embeddings, get_embedding
 from src.vector_db import init_pinecone, upsert_embeddings, query_similar
 from openai import OpenAI
 
@@ -225,51 +225,90 @@ def process_restaurant_results(results: List[Dict], page: int = 1, page_size: in
 @limiter.limit("30/minute")
 async def search_restaurants(request: Request, search_request: RestaurantSearchRequest):
     """Search for restaurants with filters"""
-    # Mock restaurant data for testing
-    restaurants = [
-        RestaurantDetails(
-            id="1",
-            name="Test Italian Restaurant",
-            rating=4.5,
-            price_range="$$",
-            description="A cozy Italian restaurant with authentic cuisine",
-            cuisine_type="Italian",
-            location="123 Main St",
-            popular_dishes=["Pasta Carbonara", "Margherita Pizza"]
-        ),
-        RestaurantDetails(
-            id="2",
-            name="Test Sushi Place",
-            rating=4.8,
-            price_range="$$$",
-            description="High-end sushi restaurant with fresh fish",
-            cuisine_type="Japanese",
-            location="456 Oak Ave",
-            popular_dishes=["Dragon Roll", "Tuna Sashimi"]
+    try:
+        # Initialize Pinecone
+        index = init_pinecone()
+        if not index:
+            raise HTTPException(
+                status_code=500,
+                detail={"error": "database_error", "message": "Failed to connect to vector database"}
+            )
+
+        # Get query embedding if query is provided
+        query_embedding = None
+        if search_request.query:
+            query_embedding = await get_embedding(search_request.query)
+            if not query_embedding:
+                raise HTTPException(
+                    status_code=500,
+                    detail={"error": "embedding_error", "message": "Failed to generate query embedding"}
+                )
+
+        # Prepare filter based on search parameters
+        filter_dict = {}
+        if search_request.price_range:
+            filter_dict["price_range"] = search_request.price_range
+        if search_request.min_rating:
+            filter_dict["rating"] = {"$gte": search_request.min_rating}
+
+        # Query similar restaurants
+        if query_embedding:
+            results = query_similar(
+                index=index,
+                query_embedding=query_embedding,
+                top_k=50,  # Get more results for filtering
+                score_threshold=0.7,
+                filter=filter_dict if filter_dict else None
+            )
+        else:
+            # If no query, get all restaurants matching filters
+            results = query_similar(
+                index=index,
+                query_embedding=[0] * 1536,  # Dummy embedding
+                top_k=50,
+                score_threshold=0,
+                filter=filter_dict if filter_dict else None
+            )
+
+        # Convert results to RestaurantDetails objects
+        restaurants = []
+        for result in results:
+            metadata = result["metadata"]
+            restaurants.append(
+                RestaurantDetails(
+                    id=result["id"],
+                    name=metadata.get("restaurant_name", "Unknown"),
+                    rating=float(metadata.get("rating", 0)),
+                    price_range=metadata.get("price_range", "$"),
+                    description=metadata.get("description", ""),
+                    cuisine_type=metadata.get("cuisine_type", "Unknown"),
+                    location=metadata.get("location", "Unknown"),
+                    popular_dishes=metadata.get("popular_dishes", [])
+                )
+            )
+
+        # Apply pagination
+        total_results = len(restaurants)
+        total_pages = (total_results + search_request.page_size - 1) // search_request.page_size
+        start = (search_request.page - 1) * search_request.page_size
+        end = start + search_request.page_size
+        paginated = restaurants[start:end]
+
+        return RestaurantSearchResponse(
+            restaurants=paginated,
+            total_results=total_results,
+            total_pages=total_pages,
+            page=search_request.page,
+            page_size=search_request.page_size
         )
-    ]
 
-    # Apply filters
-    filtered = restaurants
-    if search_request.min_rating:
-        filtered = [r for r in filtered if r.rating >= search_request.min_rating]
-    if search_request.price_range:
-        filtered = [r for r in filtered if r.price_range == search_request.price_range]
-
-    # Calculate pagination
-    total_results = len(filtered)
-    total_pages = (total_results + search_request.page_size - 1) // search_request.page_size
-    start = (search_request.page - 1) * search_request.page_size
-    end = start + search_request.page_size
-    paginated = filtered[start:end]
-
-    return RestaurantSearchResponse(
-        restaurants=paginated,
-        total_results=total_results,
-        total_pages=total_pages,
-        page=search_request.page,
-        page_size=search_request.page_size
-    )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "search_error", "message": f"Error searching restaurants: {str(e)}"}
+        )
 
 @app.get(f"{API_PREFIX}/restaurants/{{restaurant_id}}", response_model=RestaurantDetails, responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}})
 @limiter.limit("30/minute")

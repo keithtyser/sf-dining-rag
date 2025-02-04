@@ -37,157 +37,165 @@ def convert_to_native_types(obj: Any) -> Any:
     else:
         return obj
 
-def init_pinecone() -> Optional[Any]:
+@dataclass
+class SearchResult:
+    """Class to represent a search result"""
+    id: str
+    score: float
+    metadata: Dict[str, Any]
+
+def init_pinecone() -> Optional[pinecone.Index]:
     """
-    Initialize Pinecone with environment variables and connect to existing index
+    Initialize Pinecone client and return index
     
     Returns:
-        Optional[Any]: Initialized Pinecone index if successful, None otherwise
+        Optional[pinecone.Index]: Pinecone index or None if initialization fails
     """
     try:
-        # Initialize Pinecone
-        api_key = os.getenv('PINECONE_API_KEY')
-        environment = os.getenv('PINECONE_ENVIRONMENT')
-        
-        # Debug information
-        print("\nEnvironment variables:")
-        print(f"API Key found: {'Yes' if api_key else 'No'}")
-        print(f"Environment found: {'Yes' if environment else 'No'}")
-        if environment:
-            print(f"Environment value: {environment}")
-            
-        if not api_key or not environment:
-            print("Error: Pinecone API key or environment not found in .env file")
+        api_key = os.getenv("PINECONE_API_KEY")
+        if not api_key:
+            print("Error: Pinecone API key not found")
             return None
             
-        print(f"\nInitializing Pinecone with environment: {environment}")
-        
-        # Initialize Pinecone client
         pc = Pinecone(api_key=api_key)
         
-        # List available indexes
+        # Check if index exists
         indexes = pc.list_indexes()
-        print("\nAvailable indexes:", [index.name for index in indexes])
-        
-        # Get the existing index
-        if not any(index.name == INDEX_NAME for index in indexes):
-            print(f"\nError: Index '{INDEX_NAME}' not found. Please create it in the Pinecone console first.")
-            return None
+        if not any(idx.name == INDEX_NAME for idx in indexes):
+            # Create index if it doesn't exist
+            pc.create_index(
+                name=INDEX_NAME,
+                dimension=DIMENSION,
+                metric="cosine",
+                spec=ServerlessSpec(cloud="aws", region="us-west-2")
+            )
             
-        # Connect to existing index
+        # Get index and verify dimension
         index = pc.Index(INDEX_NAME)
         stats = index.describe_index_stats()
-        print(f"\nConnected to index '{INDEX_NAME}'")
-        print(f"Index stats: {stats}")
+        if stats["dimension"] != DIMENSION:
+            print(f"Error: Index dimension mismatch. Expected {DIMENSION}, got {stats['dimension']}")
+            return None
             
         return index
         
     except Exception as e:
-        print(f"\nError initializing Pinecone: {str(e)}")
-        print("\nDebug information:")
-        print(f"Current working directory: {os.getcwd()}")
-        print(f"Environment file path: {os.path.abspath('../.env')}")
-        print(f"Environment file exists: {os.path.exists('../.env')}")
+        print(f"Error initializing Pinecone: {str(e)}")
         return None
 
-def upsert_embeddings(
-    index: Any,
-    embedded_chunks: List[EmbeddedChunk],
-    batch_size: int = 100,
-    max_retries: int = 3,
-    retry_delay: float = 1.0
-) -> bool:
+def upsert_embeddings(index: pinecone.Index, chunks: List[EmbeddedChunk], batch_size: int = 100) -> bool:
     """
-    Upsert embeddings into Pinecone index
+    Upsert embeddings to Pinecone index in batches
     
     Args:
-        index: Initialized Pinecone index
-        embedded_chunks (List[EmbeddedChunk]): List of chunks with embeddings to upsert
-        batch_size (int): Number of vectors to upsert in each batch
-        max_retries (int): Maximum number of retry attempts per batch
-        retry_delay (float): Delay between retries in seconds
+        index: Pinecone index
+        chunks: List of EmbeddedChunk objects
+        batch_size: Number of vectors to upsert in each batch
         
     Returns:
-        bool: True if all upserts were successful, False otherwise
+        bool: True if successful, False otherwise
     """
     try:
-        # Prepare vectors with IDs and metadata
-        vectors = []
-        for i, chunk in enumerate(embedded_chunks):
-            # Convert numpy types to Python native types
-            metadata = convert_to_native_types(chunk.metadata)
-            embedding = convert_to_native_types(chunk.embedding)
+        total_batches = (len(chunks) + batch_size - 1) // batch_size
+        
+        for i in tqdm(range(0, len(chunks), batch_size), total=total_batches, desc="Upserting vectors"):
+            batch = chunks[i:i + batch_size]
             
-            vectors.append({
-                'id': f"chunk_{i}",
-                'values': embedding,
-                'metadata': metadata
-            })
-        
-        print(f"Preparing to upsert {len(vectors)} vectors in batches of {batch_size}")
-        
-        # Upsert in batches with progress bar
-        success = True
-        for i in tqdm(range(0, len(vectors), batch_size), desc="Upserting to Pinecone"):
-            batch = vectors[i:i + batch_size]
+            # Convert embeddings to native Python types
+            vectors = []
+            for chunk in batch:
+                vector = convert_to_native_types(chunk.embedding)
+                metadata = {
+                    "text": chunk.text,
+                    "type": chunk.metadata.get("type", "unknown"),
+                    "restaurant_id": chunk.metadata.get("restaurant_id", "unknown"),
+                    "restaurant_name": chunk.metadata.get("restaurant_name", "unknown"),
+                    "category": chunk.metadata.get("category", "unknown"),
+                    "timestamp": time.time()
+                }
+                vectors.append((str(chunk.id), vector, metadata))
             
-            # Retry logic for each batch
-            for attempt in range(max_retries):
-                try:
-                    index.upsert(vectors=batch)
-                    break
-                except Exception as e:
-                    if attempt == max_retries - 1:  # Last attempt
-                        print(f"Failed to upsert batch after {max_retries} attempts.")
-                        print(f"Error: {str(e)}")
-                        success = False
-                    else:
-                        print(f"Attempt {attempt + 1} failed. Retrying...")
-                        time.sleep(retry_delay)
-        
-        return success
+            # Upsert batch
+            index.upsert(vectors=vectors)
+            
+        return True
         
     except Exception as e:
-        print(f"Error upserting embeddings: {str(e)}")
+        print(f"Error upserting vectors: {str(e)}")
         return False
 
 def query_similar(
-    index: Any,
+    index: pinecone.Index,
     query_embedding: List[float],
     top_k: int = 5,
-    include_metadata: bool = True,
-    score_threshold: float = 0.0
+    score_threshold: float = 0.7,
+    filter: Optional[Dict] = None
 ) -> List[Dict[str, Any]]:
     """
-    Query Pinecone index for similar vectors
+    Query similar vectors from Pinecone
     
     Args:
-        index: Initialized Pinecone index
-        query_embedding (List[float]): Query vector to find similar embeddings
-        top_k (int): Number of similar results to return
-        include_metadata (bool): Whether to include metadata in results
-        score_threshold (float): Minimum similarity score for results
+        index: Pinecone index
+        query_embedding: Query vector
+        top_k: Number of results to return
+        score_threshold: Minimum similarity score threshold
+        filter: Optional metadata filters
         
     Returns:
-        List[Dict[str, Any]]: List of similar items with scores and metadata
+        List of similar vectors with their metadata and scores
     """
     try:
+        # Query the index
         results = index.query(
             vector=query_embedding,
             top_k=top_k,
-            include_metadata=include_metadata
+            include_metadata=True,
+            filter=filter
         )
         
-        # Filter results by score threshold
-        matches = results.get('matches', [])
-        if score_threshold > 0:
-            matches = [m for m in matches if m.get('score', 0) >= score_threshold]
-            
-        return matches
+        # Filter and format results
+        filtered_results = []
+        for match in results.matches:
+            if match.score >= score_threshold:
+                filtered_results.append({
+                    "id": match.id,
+                    "score": match.score,
+                    "metadata": match.metadata
+                })
+        
+        return filtered_results
         
     except Exception as e:
-        print(f"Error querying Pinecone: {str(e)}")
+        print(f"Error querying similar vectors: {str(e)}")
         return []
+
+def delete_old_vectors(index: pinecone.Index, days_old: int = 30) -> bool:
+    """
+    Delete vectors older than specified days
+    
+    Args:
+        index: Pinecone index
+        days_old: Age threshold in days
+        
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    try:
+        # Calculate timestamp threshold
+        threshold = time.time() - (days_old * 24 * 60 * 60)
+        
+        # Delete old vectors
+        index.delete(
+            filter={
+                "timestamp": {"$lt": threshold}
+            }
+        )
+        
+        return True
+        
+    except Exception as e:
+        print(f"Error deleting old vectors: {str(e)}")
+        return False
 
 if __name__ == "__main__":
     # Test Pinecone connection and basic operations

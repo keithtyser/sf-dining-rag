@@ -3,7 +3,7 @@ from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
 import numpy as np
 from pinecone import Index
-from src.embedding import generate_embedding
+from src.embedding import get_embedding
 from src.vector_db import init_pinecone, query_similar, convert_to_native_types
 
 # Load environment variables
@@ -26,7 +26,7 @@ def embed_query(query: str) -> Optional[List[float]]:
             return None
             
         # Generate embedding
-        embedding = generate_embedding(query.strip())
+        embedding = get_embedding(query.strip())
         if embedding:
             # Convert to native Python types for Pinecone
             return convert_to_native_types(embedding)
@@ -36,45 +36,47 @@ def embed_query(query: str) -> Optional[List[float]]:
         print(f"Error embedding query: {str(e)}")
         return None
 
-def get_similar_chunks(
+async def get_similar_chunks(
     query: str,
     top_k: int = 5,
-    score_threshold: float = 0.7
+    score_threshold: float = 0.7,
+    filter_dict: Optional[Dict] = None
 ) -> List[Dict[str, Any]]:
     """
-    Get chunks from the vector database that are similar to the query
+    Get chunks similar to the query using vector search
     
     Args:
-        query (str): The user's query text
-        top_k (int): Number of similar results to return
-        score_threshold (float): Minimum similarity score to include in results
+        query: Search query
+        top_k: Number of results to return
+        score_threshold: Minimum similarity score
+        filter_dict: Optional metadata filters
         
     Returns:
-        List[Dict[str, Any]]: List of similar chunks with their metadata and scores
+        List of similar chunks with metadata and scores
     """
     try:
         # Initialize Pinecone
         index = init_pinecone()
         if not index:
-            print("Error: Could not initialize Pinecone")
+            print("Error: Failed to initialize vector database")
             return []
             
-        # Generate query embedding
-        query_embedding = embed_query(query)
+        # Get query embedding
+        query_embedding = await get_embedding(query)
         if not query_embedding:
-            print("Error: Could not generate query embedding")
+            print("Error: Failed to generate query embedding")
             return []
             
-        # Query the index
-        results = query_similar(index, query_embedding, top_k=top_k)
+        # Query similar vectors
+        results = query_similar(
+            index=index,
+            query_embedding=query_embedding,
+            top_k=top_k,
+            score_threshold=score_threshold,
+            filter=filter_dict
+        )
         
-        # Filter results by score threshold
-        filtered_results = [
-            result for result in results
-            if result.get('score', 0) >= score_threshold
-        ]
-        
-        return filtered_results
+        return results
         
     except Exception as e:
         print(f"Error getting similar chunks: {str(e)}")

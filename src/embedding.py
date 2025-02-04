@@ -8,7 +8,12 @@ import time
 from dotenv import load_dotenv
 
 # Load environment variables
-load_dotenv()
+load_dotenv(override=True)
+
+# Constants
+EMBEDDING_MODEL = "text-embedding-ada-002"
+MAX_RETRIES = 3
+RETRY_DELAY = 1.0
 
 # Initialize OpenAI client with API key from environment variable
 api_key = os.getenv("OPENAI_API_KEY")
@@ -20,37 +25,150 @@ client = OpenAI(api_key=api_key)
 @dataclass
 class EmbeddedChunk:
     """Class to hold text chunk and its embedding"""
+    id: str
     text: str
     embedding: List[float]
     metadata: Dict[str, Any]
 
-def generate_embedding(text: str) -> Optional[List[float]]:
-    """Get embedding for a single text using OpenAI's API"""
-    # Handle empty or whitespace-only input
-    if not text or not text.strip():
+def get_openai_client() -> Optional[OpenAI]:
+    """
+    Get an initialized OpenAI client
+    
+    Returns:
+        Optional[OpenAI]: Initialized OpenAI client or None if initialization fails
+    """
+    try:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            print("Error: OpenAI API key not found")
+            return None
+            
+        return OpenAI(api_key=api_key)
+        
+    except Exception as e:
+        print(f"Error initializing OpenAI client: {str(e)}")
+        return None
+
+async def get_embedding(text: str) -> Optional[List[float]]:
+    """
+    Get embedding for a single text using OpenAI's API
+    
+    Args:
+        text: Text to embed
+        
+    Returns:
+        Optional[List[float]]: Embedding vector or None if generation fails
+    """
+    client = get_openai_client()
+    if not client:
         return None
         
     try:
-        response = client.embeddings.create(
-            model="text-embedding-ada-002",
-            input=text
-        )
-        return response.data[0].embedding
+        for attempt in range(MAX_RETRIES):
+            try:
+                response = client.embeddings.create(
+                    model=EMBEDDING_MODEL,
+                    input=text
+                )
+                return response.data[0].embedding
+            except Exception as e:
+                if attempt == MAX_RETRIES - 1:
+                    print(f"Failed to generate embedding after {MAX_RETRIES} attempts: {str(e)}")
+                    return None
+                time.sleep(RETRY_DELAY)
+                
     except Exception as e:
-        print(f"Error getting embedding: {e}")
-        raise
+        print(f"Error generating embedding: {str(e)}")
+        return None
 
-def batch_generate_embeddings(texts: List[str]) -> List[List[float]]:
-    """Get embeddings for a batch of texts using OpenAI's API"""
+async def batch_generate_embeddings(texts: List[str], batch_size: int = 100) -> List[Optional[List[float]]]:
+    """
+    Generate embeddings for multiple texts in batches
+    
+    Args:
+        texts: List of texts to embed
+        batch_size: Number of texts to process in each batch
+        
+    Returns:
+        List[Optional[List[float]]]: List of embedding vectors (None for failed generations)
+    """
+    client = get_openai_client()
+    if not client:
+        return [None] * len(texts)
+        
+    embeddings = []
+    total_batches = (len(texts) + batch_size - 1) // batch_size
+    
+    for i in tqdm(range(0, len(texts), batch_size), total=total_batches, desc="Generating embeddings"):
+        batch = texts[i:i + batch_size]
+        
+        try:
+            for attempt in range(MAX_RETRIES):
+                try:
+                    response = client.embeddings.create(
+                        model=EMBEDDING_MODEL,
+                        input=batch
+                    )
+                    batch_embeddings = [data.embedding for data in response.data]
+                    embeddings.extend(batch_embeddings)
+                    break
+                except Exception as e:
+                    if attempt == MAX_RETRIES - 1:
+                        print(f"Failed to generate batch embeddings after {MAX_RETRIES} attempts: {str(e)}")
+                        embeddings.extend([None] * len(batch))
+                    else:
+                        time.sleep(RETRY_DELAY)
+                        
+        except Exception as e:
+            print(f"Error generating batch embeddings: {str(e)}")
+            embeddings.extend([None] * len(batch))
+            
+    return embeddings
+
+async def create_restaurant_embedding(restaurant: Dict[str, Any]) -> Optional[EmbeddedChunk]:
+    """
+    Create an embedding for a restaurant
+    
+    Args:
+        restaurant: Restaurant data dictionary
+        
+    Returns:
+        Optional[EmbeddedChunk]: Embedded restaurant data or None if embedding fails
+    """
     try:
-        response = client.embeddings.create(
-            model="text-embedding-ada-002",
-            input=texts
+        # Create descriptive text for the restaurant
+        text = f"{restaurant['name']} is a {restaurant.get('cuisine_type', 'restaurant')}. "
+        text += f"It has a rating of {restaurant.get('rating', 'N/A')} and a price range of {restaurant.get('price_range', 'N/A')}. "
+        text += f"{restaurant.get('description', '')} "
+        if restaurant.get('popular_dishes'):
+            text += f"Popular dishes include: {', '.join(restaurant['popular_dishes'])}. "
+        text += f"Located at: {restaurant.get('location', 'N/A')}"
+        
+        # Generate embedding
+        embedding = await get_embedding(text)
+        if not embedding:
+            return None
+            
+        return EmbeddedChunk(
+            id=restaurant['id'],
+            text=text,
+            embedding=np.array(embedding),
+            metadata={
+                "type": "restaurant_overview",
+                "restaurant_id": restaurant['id'],
+                "restaurant_name": restaurant['name'],
+                "rating": restaurant.get('rating'),
+                "price_range": restaurant.get('price_range'),
+                "cuisine_type": restaurant.get('cuisine_type'),
+                "description": restaurant.get('description'),
+                "location": restaurant.get('location'),
+                "popular_dishes": restaurant.get('popular_dishes', [])
+            }
         )
-        return [data.embedding for data in response.data]
+        
     except Exception as e:
-        print(f"Error getting embeddings: {e}")
-        raise
+        print(f"Error creating restaurant embedding: {str(e)}")
+        return None
 
 def embed_chunks(
     chunks: List[Dict[str, Any]], 
