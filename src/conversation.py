@@ -4,7 +4,7 @@ Enhanced conversation management module with persistence and context handling.
 
 import json
 import time
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 from dataclasses import dataclass, field
 from datetime import datetime
 import os
@@ -100,19 +100,39 @@ class Conversation:
     def save(self) -> None:
         """Save conversation to disk"""
         if not self.storage_dir:
+            print(f"Warning: No storage directory set for conversation {self.id}")
             return
             
-        self.storage_dir.mkdir(parents=True, exist_ok=True)
-        file_path = self.storage_dir / f"{self.id}.json"
-        with open(file_path, "w") as f:
-            json.dump(self.to_dict(), f, indent=2)
+        try:
+            self.storage_dir.mkdir(parents=True, exist_ok=True)
+            file_path = self.storage_dir.absolute() / f"{self.id}.json"
+            print(f"Saving conversation {self.id} to {file_path}")
+            with open(file_path, "w") as f:
+                json.dump(self.to_dict(), f, indent=2)
+            print(f"Successfully saved conversation {self.id}")
+        except Exception as e:
+            print(f"Error saving conversation {self.id}: {e}")
 
 class ConversationManager:
     """Manages multiple conversations with persistence"""
     def __init__(self, storage_dir: str = "data/conversations"):
-        self.storage_dir = Path(storage_dir)
-        self.storage_dir.mkdir(parents=True, exist_ok=True)
+        self._storage_dir = None
         self.conversations: Dict[str, Conversation] = {}
+        self.storage_dir = storage_dir  # This will trigger the setter
+    
+    @property
+    def storage_dir(self) -> Path:
+        return self._storage_dir
+    
+    @storage_dir.setter
+    def storage_dir(self, value: Union[str, Path]) -> None:
+        """Set storage directory and update all conversations to use it"""
+        self._storage_dir = Path(value).resolve()  # Convert to absolute path
+        self._storage_dir.mkdir(parents=True, exist_ok=True)
+        # Update storage dir for all conversations
+        for conv in self.conversations.values():
+            conv.storage_dir = self._storage_dir
+        # Load conversations from new directory if it exists
         self._load_conversations()
     
     def _load_conversations(self) -> None:
@@ -133,12 +153,16 @@ class ConversationManager:
                 id=conversation_id,
                 storage_dir=self.storage_dir
             )
+        else:
+            # Ensure storage directory is set
+            self.conversations[conversation_id].storage_dir = self.storage_dir
         return self.conversations[conversation_id]
     
     def add_message(self, conversation_id: str, role: str, content: str, 
                    metadata: Optional[Dict[str, Any]] = None) -> None:
         """Add a message to a conversation"""
         conv = self.get_conversation(conversation_id)
+        conv.storage_dir = self.storage_dir  # Ensure storage directory is set
         conv.add_message(role, content, metadata)
     
     def get_recent_conversations(self, limit: int = 10) -> List[Conversation]:
@@ -165,4 +189,7 @@ class ConversationManager:
         
         # Remove from memory
         for conv_id in to_remove:
-            del self.conversations[conv_id] 
+            del self.conversations[conv_id]
+
+# Create a global conversation manager instance
+conversation_manager = ConversationManager() 

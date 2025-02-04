@@ -1,0 +1,25 @@
+{
+  "id": "test_conv",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Test message",
+      "timestamp": 1738702396.3451734,
+      "metadata": {
+        "timestamp": 1738702396.3451734,
+        "client_info": {
+          "ip": "127.0.0.1"
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "user_id": "123",
+    "session_data": {
+      "browser": "Chrome"
+    }
+  },
+  "max_messages": 50,
+  "created_at": 1738702396.3451734,
+  "last_updated": 1738702396.3451734
+}

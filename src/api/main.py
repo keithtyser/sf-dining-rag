@@ -1,5 +1,6 @@
 import uuid
 import math
+import time
 from typing import Dict, List, Optional, Any
 from fastapi import FastAPI, HTTPException, Query, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -31,61 +32,158 @@ from src.api.dependencies import get_openai_client, get_pinecone_index
 from src.embedding import batch_generate_embeddings, get_embedding
 from src.vector_db import init_pinecone, upsert_embeddings, query_similar
 from openai import OpenAI
+from fastapi.responses import JSONResponse
 
 # API version and prefix
 API_VERSION = "1.0.0"
 API_PREFIX = "/api/v1"
 
-# Create rate limiter
-limiter = Limiter(key_func=get_remote_address)
-
-# Create FastAPI app
+# Initialize FastAPI app with configuration
 app = FastAPI(
     title="Restaurant Chat API",
-    description="API for restaurant information and chat interactions",
+    description="""
+    API for restaurant information and chat interface.
+    Features include:
+    * Restaurant search with filters
+    * Chat interface for restaurant queries
+    * Conversation management
+    * Rate limiting and authentication
+    """,
     version="1.0.0",
-    docs_url=f"{API_PREFIX}/docs",
-    redoc_url=f"{API_PREFIX}/redoc",
-    openapi_url=f"{API_PREFIX}/openapi.json"
+    openapi_tags=[
+        {
+            "name": "health",
+            "description": "Health check endpoint to verify API status"
+        },
+        {
+            "name": "chat",
+            "description": "Chat endpoints for natural language interactions"
+        },
+        {
+            "name": "restaurants",
+            "description": "Endpoints for searching and retrieving restaurant information"
+        },
+        {
+            "name": "conversations",
+            "description": "Endpoints for managing chat conversations"
+        }
+    ]
 )
-
-# Add rate limiter to app
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with specific origins
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Add request logging middleware
+# Add logging middleware
 app.add_middleware(RequestLoggingMiddleware)
 
-# Add GZip compression middleware
-app.add_middleware(GZipMiddleware, minimum_size=1000)  # Only compress responses larger than 1KB
+# Initialize rate limiter
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=["60/minute"],
+    headers_enabled=True,  # Enable rate limit headers
+    strategy="fixed-window",  # Use fixed window strategy
+)
+app.state.limiter = limiter
+
+# Add rate limit middleware
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    """Add rate limit headers to responses"""
+    try:
+        response = await call_next(request)
+        return response
+    except Exception as e:
+        if isinstance(e, RateLimitExceeded):
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "error": "rate_limit_exceeded",
+                    "message": "Too many requests. Please try again later."
+                },
+                headers={
+                    "Retry-After": "60"
+                }
+            )
+        raise e
+
+# Add exception handlers
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    """Handle rate limit exceeded errors"""
+    return JSONResponse(
+        status_code=429,
+        content={
+            "error": "rate_limit_exceeded",
+            "message": "Too many requests. Please try again later."
+        },
+        headers={
+            "Retry-After": "60"
+        }
+    )
 
 # Store conversation histories
 conversation_manager = ConversationManager()
 
-@app.get(f"{API_PREFIX}/health")
+@app.get(
+    f"{API_PREFIX}/health",
+    tags=["health"],
+    summary="Check API health",
+    response_description="Returns the current health status of the API"
+)
 @limiter.limit("60/minute")
 async def health_check(request: Request):
-    """Health check endpoint"""
-    return {"status": "healthy"}
+    """
+    Perform a health check on the API.
+    
+    This endpoint can be used to:
+    * Verify the API is running
+    * Check the response time
+    * Validate the rate limiter
+    
+    Returns:
+        dict: A dictionary containing the API health status
+    """
+    return {"status": "healthy", "version": API_VERSION}
 
-@app.post(f"{API_PREFIX}/query", response_model=QueryResponse)
+@app.post(
+    f"{API_PREFIX}/query",
+    response_model=QueryResponse,
+    tags=["restaurants"],
+    summary="Query restaurant information",
+    response_description="Returns a list of relevant restaurant information based on the query"
+)
 @limiter.limit("30/minute")
 async def query_restaurants(request: Request, query_request: QueryRequest):
-    """Query for restaurant information"""
-    try:
-        # Get similar chunks from vector search
-        results = get_similar_chunks(query_request.query)
+    """
+    Search for restaurant information using natural language queries.
+    
+    This endpoint uses semantic search to find relevant restaurant information based on the query.
+    The results are ranked by relevance score.
+    
+    Args:
+        query_request: The search query and optional parameters
         
-        # Convert results to response format
+    Returns:
+        QueryResponse: A list of restaurant results with relevance scores
+        
+    Raises:
+        HTTPException: If the query processing fails
+    
+    Example:
+        ```json
+        {
+            "query": "Italian restaurants with outdoor seating"
+        }
+        ```
+    """
+    try:
+        results = get_similar_chunks(query_request.query)
         query_results = []
         for result in results:
             query_results.append(QueryResult(
@@ -95,9 +193,7 @@ async def query_restaurants(request: Request, query_request: QueryRequest):
                 description=result.get("description", ""),
                 score=result.get("score", 0.0)
             ))
-            
         return QueryResponse(results=query_results)
-        
     except Exception as e:
         raise HTTPException(
             status_code=400,
@@ -107,21 +203,40 @@ async def query_restaurants(request: Request, query_request: QueryRequest):
             }
         )
 
-@app.post(f"{API_PREFIX}/chat", response_model=ChatResponse)
+@app.post(
+    f"{API_PREFIX}/chat",
+    response_model=ChatResponse,
+    tags=["chat"],
+    summary="Generate chat response",
+    response_description="Returns an AI-generated response based on the conversation context"
+)
 @limiter.limit("30/minute")
 async def chat_completion(
     request: Request,
     chat_request: ChatRequest,
     openai_client: OpenAI = Depends(get_openai_client)
 ):
-    """Generate chat response"""
+    """
+    Generate a chat response based on the user's query and conversation context.
+    
+    Args:
+        chat_request (ChatRequest): The chat request containing the query and optional conversation ID
+        openai_client (OpenAI): The OpenAI client for generating responses
+        
+    Returns:
+        ChatResponse: The generated response and conversation details
+    """
     try:
-        # Generate response using conversation manager
-        response = generate_response(
+        # Generate conversation ID if not provided
+        conversation_id = chat_request.conversation_id or str(uuid.uuid4())
+        
+        # Generate response
+        response = await generate_response(
             query=chat_request.query,
-            conversation_id=chat_request.conversation_id or str(uuid.uuid4()),
+            conversation_id=conversation_id,
             client=openai_client,
-            get_similar_chunks=get_similar_chunks
+            get_similar_chunks=get_similar_chunks,
+            context_window_size=chat_request.context_window_size
         )
         
         if not response:
@@ -129,9 +244,8 @@ async def chat_completion(
             
         return ChatResponse(
             response=response,
-            conversation_id=chat_request.conversation_id
+            conversation_id=conversation_id
         )
-        
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -141,13 +255,37 @@ async def chat_completion(
             }
         )
 
-@app.get(f"{API_PREFIX}/conversations/recent", response_model=List[Dict[str, Any]])
+@app.get(
+    f"{API_PREFIX}/conversations/recent",
+    response_model=List[Dict[str, Any]],
+    tags=["conversations"],
+    summary="Get recent conversations",
+    response_description="Returns a list of recent conversations"
+)
 @limiter.limit("60/minute")
 async def get_recent_conversations(
     request: Request,
-    limit: int = Query(10, ge=1, le=50)
+    limit: int = Query(10, ge=1, le=50, description="Maximum number of conversations to return")
 ):
-    """Get recent conversations"""
+    """
+    Retrieve recent conversations from the system.
+    
+    This endpoint returns the most recent conversations, ordered by last update time.
+    Each conversation includes:
+    * Conversation ID
+    * Message history
+    * Metadata
+    * Timestamps
+    
+    Args:
+        limit: Maximum number of conversations to return (1-50)
+        
+    Returns:
+        List[Dict[str, Any]]: List of recent conversations
+        
+    Raises:
+        HTTPException: If fetching conversations fails
+    """
     try:
         conversations = conversation_manager.get_recent_conversations(limit=limit)
         return [conv.to_dict() for conv in conversations]
@@ -160,16 +298,40 @@ async def get_recent_conversations(
             }
         )
 
-@app.delete(f"{API_PREFIX}/conversations/cleanup")
+@app.delete(
+    f"{API_PREFIX}/conversations/cleanup",
+    tags=["conversations"],
+    summary="Clean up old conversations",
+    response_description="Returns the status of the cleanup operation"
+)
 @limiter.limit("10/minute")
 async def cleanup_old_conversations(
     request: Request,
-    days_old: int = Query(30, ge=1)
+    days_old: int = Query(30, ge=1, description="Age in days of conversations to clean up")
 ):
-    """Clean up old conversations"""
+    """
+    Remove conversations older than the specified number of days.
+    
+    This endpoint:
+    * Removes old conversations from storage
+    * Frees up system resources
+    * Helps maintain system performance
+    
+    Args:
+        days_old: Age in days of conversations to remove (minimum 1)
+        
+    Returns:
+        dict: Status of the cleanup operation
+        
+    Raises:
+        HTTPException: If cleanup fails
+    """
     try:
         conversation_manager.cleanup_old_conversations(days_old=days_old)
-        return {"status": "success", "message": f"Cleaned up conversations older than {days_old} days"}
+        return {
+            "status": "success",
+            "message": f"Cleaned up conversations older than {days_old} days"
+        }
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -381,4 +543,73 @@ async def get_restaurant_details(request: Request, restaurant_id: str):
                 code="DETAILS_FAILED",
                 details={"message": str(e)}
             ).dict()
-        ) 
+        )
+
+@app.get(
+    f"{API_PREFIX}/chat/{{conversation_id}}",
+    tags=["chat"],
+    summary="Get conversation by ID",
+    response_description="Returns the conversation details",
+    responses={
+        404: {"description": "Conversation not found"},
+        200: {"description": "Conversation details"}
+    }
+)
+@limiter.limit("60/minute")
+async def get_conversation(request: Request, conversation_id: str):
+    """
+    Retrieve a conversation by its ID.
+    
+    Args:
+        conversation_id (str): The ID of the conversation to retrieve
+        
+    Returns:
+        dict: The conversation details including messages and metadata
+    """
+    try:
+        if conversation_id not in conversation_manager.conversations:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+            
+        conv = conversation_manager.get_conversation(conversation_id)
+        return {
+            "conversation_id": conv.id,
+            "messages": [
+                {
+                    "role": msg.role,
+                    "content": msg.content,
+                    "timestamp": msg.timestamp,
+                    "metadata": msg.metadata
+                }
+                for msg in conv.messages
+            ],
+            "metadata": conv.metadata,
+            "created_at": conv.created_at,
+            "last_updated": conv.last_updated
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post(
+    f"{API_PREFIX}/chat/cleanup",
+    tags=["chat"],
+    summary="Clean up old conversations",
+    response_description="Returns the cleanup status"
+)
+@limiter.limit("10/minute")
+async def cleanup_conversations(request: Request, days_old: int = 30):
+    """
+    Clean up conversations older than the specified number of days.
+    
+    Args:
+        days_old (int): Number of days after which conversations should be cleaned up
+        
+    Returns:
+        dict: Status of the cleanup operation
+    """
+    try:
+        conversation_manager.cleanup_old_conversations(days_old=days_old)
+        return {"status": "success", "message": "Old conversations cleaned up"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) 

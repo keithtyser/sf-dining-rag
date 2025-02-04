@@ -1,0 +1,141 @@
+{
+  "id": "59b87d80-f98d-4f56-b03a-f5178e0df502",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Message 1",
+      "timestamp": 1738705972.5439746,
+      "metadata": {
+        "timestamp": 1738705972.5439746,
+        "context_chunks": 0,
+        "type": "user_query"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "This is a test response",
+      "timestamp": 1738705972.5454626,
+      "metadata": {
+        "timestamp": 1738705972.5454626,
+        "model": "gpt-3.5-turbo",
+        "temperature": 0.7,
+        "max_tokens": 500,
+        "type": "assistant_response"
+      }
+    },
+    {
+      "role": "user",
+      "content": "Message 2",
+      "timestamp": 1738705972.548935,
+      "metadata": {
+        "timestamp": 1738705972.548935,
+        "context_chunks": 0,
+        "type": "user_query"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "This is a test response",
+      "timestamp": 1738705972.5499268,
+      "metadata": {
+        "timestamp": 1738705972.5499268,
+        "model": "gpt-3.5-turbo",
+        "temperature": 0.7,
+        "max_tokens": 500,
+        "type": "assistant_response"
+      }
+    },
+    {
+      "role": "user",
+      "content": "Message 3",
+      "timestamp": 1738705972.553895,
+      "metadata": {
+        "timestamp": 1738705972.553895,
+        "context_chunks": 0,
+        "type": "user_query"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "This is a test response",
+      "timestamp": 1738705972.5548868,
+      "metadata": {
+        "timestamp": 1738705972.5548868,
+        "model": "gpt-3.5-turbo",
+        "temperature": 0.7,
+        "max_tokens": 500,
+        "type": "assistant_response"
+      }
+    },
+    {
+      "role": "user",
+      "content": "Message 4",
+      "timestamp": 1738705972.5593507,
+      "metadata": {
+        "timestamp": 1738705972.5593507,
+        "context_chunks": 0,
+        "type": "user_query"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "This is a test response",
+      "timestamp": 1738705972.5613348,
+      "metadata": {
+        "timestamp": 1738705972.5613348,
+        "model": "gpt-3.5-turbo",
+        "temperature": 0.7,
+        "max_tokens": 500,
+        "type": "assistant_response"
+      }
+    },
+    {
+      "role": "user",
+      "content": "Message 5",
+      "timestamp": 1738705972.5653028,
+      "metadata": {
+        "timestamp": 1738705972.5653028,
+        "context_chunks": 0,
+        "type": "user_query"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "This is a test response",
+      "timestamp": 1738705972.5667908,
+      "metadata": {
+        "timestamp": 1738705972.5667908,
+        "model": "gpt-3.5-turbo",
+        "temperature": 0.7,
+        "max_tokens": 500,
+        "type": "assistant_response"
+      }
+    },
+    {
+      "role": "user",
+      "content": "Message 6",
+      "timestamp": 1738705972.5707586,
+      "metadata": {
+        "timestamp": 1738705972.5707586,
+        "context_chunks": 0,
+        "type": "user_query"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "This is a test response",
+      "timestamp": 1738705972.5722473,
+      "metadata": {
+        "timestamp": 1738705972.5722473,
+        "model": "gpt-3.5-turbo",
+        "temperature": 0.7,
+        "max_tokens": 500,
+        "type": "assistant_response"
+      }
+    }
+  ],
+  "metadata": {},
+  "max_messages": 50,
+  "created_at": 1738705972.5439746,
+  "last_updated": 1738705972.5722473
+}

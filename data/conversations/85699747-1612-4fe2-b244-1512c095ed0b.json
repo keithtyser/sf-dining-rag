@@ -1,0 +1,19 @@
+{
+  "id": "85699747-1612-4fe2-b244-1512c095ed0b",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Tell me about Test Restaurant",
+      "timestamp": 1738705602.5170496,
+      "metadata": {
+        "timestamp": 1738705602.5170496,
+        "context_chunks": 0,
+        "type": "user_query"
+      }
+    }
+  ],
+  "metadata": {},
+  "max_messages": 50,
+  "created_at": 1738705602.5170496,
+  "last_updated": 1738705602.5170496
+}

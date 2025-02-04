@@ -1,0 +1,53 @@
+{
+  "id": "26be9dda-5a3c-490a-b093-e95537c6adac",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Tell me about Test Restaurant",
+      "timestamp": 1738705870.054033,
+      "metadata": {
+        "timestamp": 1738705870.054033,
+        "context_chunks": 0,
+        "type": "user_query"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "This is a test response",
+      "timestamp": 1738705870.0550258,
+      "metadata": {
+        "timestamp": 1738705870.0550258,
+        "model": "gpt-3.5-turbo",
+        "temperature": 0.7,
+        "max_tokens": 500,
+        "type": "assistant_response"
+      }
+    },
+    {
+      "role": "user",
+      "content": "What's the price range?",
+      "timestamp": 1738705870.0589936,
+      "metadata": {
+        "timestamp": 1738705870.0589936,
+        "context_chunks": 0,
+        "type": "user_query"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "This is a test response",
+      "timestamp": 1738705870.0604813,
+      "metadata": {
+        "timestamp": 1738705870.0604813,
+        "model": "gpt-3.5-turbo",
+        "temperature": 0.7,
+        "max_tokens": 500,
+        "type": "assistant_response"
+      }
+    }
+  ],
+  "metadata": {},
+  "max_messages": 50,
+  "created_at": 1738705870.054033,
+  "last_updated": 1738705870.0604813
+}

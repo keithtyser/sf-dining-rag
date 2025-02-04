@@ -3,7 +3,8 @@ Chat module for generating responses using OpenAI's API with conversation contex
 """
 
 import os
-from typing import List, Dict, Any, Optional, Callable
+import uuid
+from typing import List, Dict, Any, Optional, Callable, Awaitable
 from dotenv import load_dotenv
 from openai import OpenAI
 from src.embedding import get_embedding
@@ -11,16 +12,16 @@ from src.conversation import ConversationManager, Message
 import time
 
 # Load environment variables
-load_dotenv(override=True)
+load_dotenv()
 
 # Initialize conversation manager
 conversation_manager = ConversationManager()
 
-def generate_response(
+async def generate_response(
     query: str,
     conversation_id: str,
     client: OpenAI,
-    get_similar_chunks: Callable,
+    get_similar_chunks: Callable[[str, int], Awaitable[List[Dict[str, Any]]]],
     max_tokens: int = 500,
     temperature: float = 0.7,
     context_window_size: int = 5
@@ -32,7 +33,7 @@ def generate_response(
         query: User's query
         conversation_id: ID of the conversation
         client: OpenAI client
-        get_similar_chunks: Function to get similar chunks from vector search
+        get_similar_chunks: Async function to get similar chunks from vector search
         max_tokens: Maximum tokens in response
         temperature: Response randomness (0-1)
         context_window_size: Number of recent messages to include
@@ -45,11 +46,23 @@ def generate_response(
         conversation = conversation_manager.get_conversation(conversation_id)
         
         # Get relevant context from vector search
-        context_chunks = get_similar_chunks(query, top_k=3)
+        context_chunks = await get_similar_chunks(query, top_k=3)
         context_text = "\n".join([
             f"Context {i+1}:\n{chunk['metadata']['text']}\n"
             for i, chunk in enumerate(context_chunks)
         ])
+        
+        # Add user message to conversation first
+        conversation_manager.add_message(
+            conversation_id=conversation_id,
+            role="user",
+            content=query,
+            metadata={
+                "timestamp": time.time(),
+                "context_chunks": len(context_chunks),
+                "type": "user_query"
+            }
+        )
         
         # Get conversation context window
         conversation_context = conversation.get_context_window(context_window_size)
@@ -69,7 +82,6 @@ def generate_response(
         # Prepare messages for API call
         messages = [{"role": "system", "content": system_prompt}]
         messages.extend(conversation_context)
-        messages.append({"role": "user", "content": user_prompt})
         
         # Generate response
         response = client.chat.completions.create(
@@ -83,18 +95,7 @@ def generate_response(
         
         response_text = response.choices[0].message.content.strip()
         
-        # Add messages to conversation history with metadata
-        conversation_manager.add_message(
-            conversation_id=conversation_id,
-            role="user",
-            content=query,
-            metadata={
-                "timestamp": time.time(),
-                "context_chunks": len(context_chunks),
-                "type": "user_query"
-            }
-        )
-        
+        # Add assistant message to conversation
         conversation_manager.add_message(
             conversation_id=conversation_id,
             role="assistant",

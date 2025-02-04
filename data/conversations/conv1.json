@@ -1,0 +1,15 @@
+{
+  "id": "conv1",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Hello from conv1",
+      "timestamp": 1738702396.3263247,
+      "metadata": {}
+    }
+  ],
+  "metadata": {},
+  "max_messages": 50,
+  "created_at": 1738702396.3263247,
+  "last_updated": 1738702396.3263247
+}

@@ -1,0 +1,31 @@
+{
+  "id": "893023ba-1a62-48a4-88c2-0e87e49cd26d",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Test message 0",
+      "timestamp": 1738706151.5932288,
+      "metadata": {
+        "timestamp": 1738706151.5932288,
+        "context_chunks": 0,
+        "type": "user_query"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "This is a test response",
+      "timestamp": 1738706153.9755397,
+      "metadata": {
+        "timestamp": 1738706153.9755397,
+        "model": "gpt-3.5-turbo",
+        "temperature": 0.7,
+        "max_tokens": 500,
+        "type": "assistant_response"
+      }
+    }
+  ],
+  "metadata": {},
+  "max_messages": 50,
+  "created_at": 1738706151.5932288,
+  "last_updated": 1738706153.9755397
+}
