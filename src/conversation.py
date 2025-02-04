@@ -4,11 +4,13 @@ Enhanced conversation management module with persistence and context handling.
 
 import json
 import time
+import uuid
 from typing import List, Dict, Any, Optional, Union
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 from pathlib import Path
+from src.api.models import Message, Conversation, ConversationMetadata
 
 @dataclass
 class Message:
@@ -56,22 +58,40 @@ class Conversation:
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert conversation to dictionary for storage"""
-        return {
-            "id": self.id,
-            "messages": [
-                {
-                    "role": msg.role,
-                    "content": msg.content,
-                    "timestamp": msg.timestamp,
-                    "metadata": msg.metadata
-                }
-                for msg in self.messages
-            ],
-            "metadata": self.metadata,
-            "max_messages": self.max_messages,
-            "created_at": self.created_at,
-            "last_updated": self.last_updated
-        }
+        try:
+            return {
+                "id": self.id,
+                "messages": [
+                    {
+                        "role": msg.role,
+                        "content": msg.content,
+                        "timestamp": msg.timestamp,
+                        "metadata": {
+                            k: str(v) if not isinstance(v, (str, int, float, bool, dict, list)) else v
+                            for k, v in msg.metadata.items()
+                        }
+                    }
+                    for msg in self.messages
+                ],
+                "metadata": {
+                    k: str(v) if not isinstance(v, (str, int, float, bool, dict, list)) else v
+                    for k, v in self.metadata.items()
+                },
+                "max_messages": self.max_messages,
+                "created_at": self.created_at,
+                "last_updated": self.last_updated
+            }
+        except Exception as e:
+            print(f"Error serializing conversation {self.id}: {e}")
+            # Return a minimal serializable version
+            return {
+                "id": self.id,
+                "messages": [],
+                "metadata": {},
+                "max_messages": self.max_messages,
+                "created_at": self.created_at,
+                "last_updated": self.last_updated
+            }
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any], storage_dir: Optional[Path] = None) -> 'Conversation':
@@ -115,24 +135,10 @@ class Conversation:
 
 class ConversationManager:
     """Manages multiple conversations with persistence"""
-    def __init__(self, storage_dir: str = "data/conversations"):
-        self._storage_dir = None
+    def __init__(self, storage_dir: str = "conversations"):
+        self.storage_dir = Path(storage_dir)
+        self.storage_dir.mkdir(parents=True, exist_ok=True)
         self.conversations: Dict[str, Conversation] = {}
-        self.storage_dir = storage_dir  # This will trigger the setter
-    
-    @property
-    def storage_dir(self) -> Path:
-        return self._storage_dir
-    
-    @storage_dir.setter
-    def storage_dir(self, value: Union[str, Path]) -> None:
-        """Set storage directory and update all conversations to use it"""
-        self._storage_dir = Path(value).resolve()  # Convert to absolute path
-        self._storage_dir.mkdir(parents=True, exist_ok=True)
-        # Update storage dir for all conversations
-        for conv in self.conversations.values():
-            conv.storage_dir = self._storage_dir
-        # Load conversations from new directory if it exists
         self._load_conversations()
     
     def _load_conversations(self) -> None:
@@ -146,24 +152,33 @@ class ConversationManager:
             except Exception as e:
                 print(f"Error loading conversation {file_path}: {e}")
     
-    def get_conversation(self, conversation_id: str) -> Conversation:
-        """Get or create a conversation"""
-        if conversation_id not in self.conversations:
-            self.conversations[conversation_id] = Conversation(
-                id=conversation_id,
-                storage_dir=self.storage_dir
-            )
-        else:
-            # Ensure storage directory is set
-            self.conversations[conversation_id].storage_dir = self.storage_dir
-        return self.conversations[conversation_id]
+    def _save_conversation(self, conversation: Conversation) -> None:
+        """Save conversation to disk"""
+        if not conversation.storage_dir:
+            print(f"Warning: No storage directory set for conversation {conversation.id}")
+            return
+            
+        try:
+            conversation.storage_dir.mkdir(parents=True, exist_ok=True)
+            file_path = conversation.storage_dir.absolute() / f"{conversation.id}.json"
+            print(f"Saving conversation {conversation.id} to {file_path}")
+            with open(file_path, "w") as f:
+                json.dump(conversation.to_dict(), f, indent=2)
+            print(f"Successfully saved conversation {conversation.id}")
+        except Exception as e:
+            print(f"Error saving conversation {conversation.id}: {e}")
+    
+    def get_conversation(self, conversation_id: str) -> Optional[Conversation]:
+        """Get a conversation by ID"""
+        return self.conversations.get(conversation_id)
     
     def add_message(self, conversation_id: str, role: str, content: str, 
                    metadata: Optional[Dict[str, Any]] = None) -> None:
         """Add a message to a conversation"""
         conv = self.get_conversation(conversation_id)
-        conv.storage_dir = self.storage_dir  # Ensure storage directory is set
-        conv.add_message(role, content, metadata)
+        if conv:
+            conv.storage_dir = self.storage_dir  # Ensure storage directory is set
+            conv.add_message(role, content, metadata)
     
     def get_recent_conversations(self, limit: int = 10) -> List[Conversation]:
         """Get most recent conversations"""
@@ -176,11 +191,11 @@ class ConversationManager:
     
     def cleanup_old_conversations(self, days_old: int = 30) -> None:
         """Remove conversations older than specified days"""
-        cutoff_time = time.time() - (days_old * 24 * 60 * 60)
+        cutoff = datetime.now() - timedelta(days=days_old)
         to_remove = []
         
         for conv_id, conv in self.conversations.items():
-            if conv.last_updated < cutoff_time:
+            if conv.last_updated < cutoff:
                 to_remove.append(conv_id)
                 # Remove file
                 file_path = self.storage_dir / f"{conv_id}.json"
@@ -191,5 +206,67 @@ class ConversationManager:
         for conv_id in to_remove:
             del self.conversations[conv_id]
 
-# Create a global conversation manager instance
+async def get_conversation_history(conversation_id: Optional[str]) -> List[Dict[str, Any]]:
+    """Get conversation history for a given conversation ID"""
+    if not conversation_id:
+        return []
+        
+    conversation = conversation_manager.get_conversation(conversation_id)
+    if not conversation:
+        return []
+        
+    return [
+        {
+            "role": msg.role,
+            "content": msg.content
+        }
+        for msg in conversation.messages
+    ]
+
+async def save_conversation(conversation_id: Optional[str], query: str, response: str):
+    """Save a conversation message and response"""
+    if not conversation_id:
+        conversation_id = str(uuid.uuid4())
+        
+    conversation = conversation_manager.get_conversation(conversation_id)
+    if not conversation:
+        now = time.time()
+        metadata = {
+            "created_at": now,
+            "last_updated": now,
+            "message_count": 0,
+            "metadata": {}
+        }
+        conversation = Conversation(
+            id=conversation_id,
+            storage_dir=conversation_manager.storage_dir,
+            messages=[],
+            metadata=metadata
+        )
+        conversation_manager.conversations[conversation_id] = conversation
+    
+    # Add user message
+    conversation.messages.append(Message(
+        role="user",
+        content=query,
+        timestamp=time.time(),
+        metadata={"type": "user_message"}
+    ))
+    
+    # Add assistant response
+    conversation.messages.append(Message(
+        role="assistant",
+        content=response,
+        timestamp=time.time(),
+        metadata={"type": "assistant_response"}
+    ))
+    
+    # Update conversation metadata
+    conversation.metadata["last_updated"] = time.time()
+    conversation.metadata["message_count"] = len(conversation.messages)
+    
+    # Save conversation
+    conversation_manager._save_conversation(conversation)
+
+# Initialize global conversation manager
 conversation_manager = ConversationManager() 

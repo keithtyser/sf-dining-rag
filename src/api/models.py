@@ -28,26 +28,16 @@ class QueryRequest(BaseModel):
         }
 
 class QueryResult(BaseModel):
-    """Model for individual restaurant search results"""
-    restaurant: str = Field(..., description="Name of the restaurant", example="La Bella Italia")
-    rating: str = Field(..., description="Restaurant rating", example="4.5")
-    price_range: str = Field(..., description="Price range indicator ($, $$, $$$)", example="$$")
-    description: str = Field(..., description="Brief description of the restaurant", example="Authentic Italian cuisine with a modern twist")
-    score: float = Field(..., description="Relevance score from the search", example=0.95)
+    """Result from a restaurant query"""
+    restaurant: str = Field(..., description="Name of the restaurant")
+    rating: str = Field(..., description="Restaurant rating")
+    price_range: str = Field(..., description="Price range of the restaurant")
+    description: str = Field(..., description="Description of the restaurant")
+    score: float = Field(..., description="Relevance score of the result")
 
 class QueryResponse(BaseModel):
-    """Response model for restaurant queries"""
-    results: List[QueryResult] = Field(
-        ...,
-        description="List of restaurant results matching the query",
-        example=[{
-            "restaurant": "La Bella Italia",
-            "rating": "4.5",
-            "price_range": "$$",
-            "description": "Authentic Italian cuisine with a modern twist",
-            "score": 0.95
-        }]
-    )
+    """Response containing query results"""
+    results: List[QueryResult] = Field(default_factory=list, description="List of query results")
 
 # Restaurant models
 class MenuItem(BaseModel):
@@ -194,96 +184,28 @@ class Restaurant(BaseModel):
         example=["Homemade Lasagna", "Fettuccine Alfredo", "Tiramisu"]
     )
 
-class RestaurantSearchRequest(BaseModel):
-    """Request model for restaurant search"""
-    query: Optional[str] = Field(
-        None,
-        description="Search query for restaurants",
-        example="Italian restaurants with outdoor seating"
-    )
-    price_range: Optional[str] = Field(
-        None,
-        description="Price range filter (e.g., $, $$, $$$)",
-        example="$$"
-    )
-    min_rating: Optional[float] = Field(
-        None,
-        ge=0,
-        le=5,
-        description="Minimum rating filter",
-        example=4.0
-    )
-    page: int = Field(
-        1,
-        ge=1,
-        description="Page number for pagination",
-        example=1
-    )
-    page_size: int = Field(
-        10,
-        ge=1,
-        le=50,
-        description="Number of results per page",
-        example=10
-    )
+class RestaurantResult(BaseModel):
+    """Detailed restaurant search result"""
+    restaurant_name: str = Field(..., description="Name of the restaurant")
+    rating: float = Field(..., description="Restaurant rating")
+    price_range: str = Field(..., description="Price range of the restaurant")
+    description: str = Field(..., description="Description of the restaurant")
+    score: float = Field(..., description="Relevance score of the result")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "query": "Italian restaurants with outdoor seating",
-                "price_range": "$$",
-                "min_rating": 4.0,
-                "page": 1,
-                "page_size": 10
-            }
-        }
+class RestaurantSearchRequest(BaseModel):
+    """Request for searching restaurants"""
+    query: str = Field(..., description="Search query string")
+    price_range: Optional[str] = Field(None, description="Filter by price range (e.g. $, $$, $$$)")
+    min_rating: Optional[float] = Field(None, ge=0, le=5, description="Minimum rating filter")
+    page: int = Field(default=1, ge=1, description="Page number for pagination")
+    page_size: int = Field(default=10, ge=1, le=50, description="Number of results per page")
 
 class RestaurantSearchResponse(BaseModel):
-    """Response model for restaurant search"""
-    restaurants: List[RestaurantDetails] = Field(
-        ...,
-        description="List of restaurants matching the search criteria"
-    )
-    total_results: int = Field(
-        ...,
-        description="Total number of matching restaurants",
-        example=100
-    )
-    total_pages: int = Field(
-        ...,
-        description="Total number of pages available",
-        example=10
-    )
-    page: int = Field(
-        ...,
-        description="Current page number",
-        example=1
-    )
-    page_size: int = Field(
-        ...,
-        description="Number of results per page",
-        example=10
-    )
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "restaurants": [{
-                    "id": "rest_123456789",
-                    "name": "La Bella Italia",
-                    "rating": 4.5,
-                    "price_range": "$$",
-                    "description": "Authentic Italian cuisine with a modern twist",
-                    "cuisine_type": "Italian",
-                    "location": "123 Main St, Downtown",
-                    "popular_dishes": ["Homemade Lasagna", "Fettuccine Alfredo", "Tiramisu"]
-                }],
-                "total_results": 100,
-                "total_pages": 10,
-                "page": 1,
-                "page_size": 10
-            }
-        }
+    """Response containing restaurant search results"""
+    restaurants: List[RestaurantResult] = Field(default_factory=list, description="List of restaurant results")
+    total_results: int = Field(..., description="Total number of results")
+    page: int = Field(..., description="Current page number")
+    page_size: int = Field(..., description="Number of results per page")
 
 class RestaurantSearchParams(BaseModel):
     """Parameters for searching restaurants"""
@@ -342,25 +264,10 @@ class RestaurantSearchParams(BaseModel):
 
 # Chat models
 class ChatRequest(BaseModel):
-    """Request model for chat completion"""
-    query: str = Field(
-        ...,
-        description="The user's query",
-        min_length=1,
-        example="What are the best Italian restaurants?"
-    )
-    conversation_id: Optional[str] = Field(
-        None,
-        description="ID of the conversation to continue",
-        pattern=r"^[a-zA-Z0-9\-_]+$",
-        example="abc123"
-    )
-    context_window_size: int = Field(
-        5,
-        description="Number of recent messages to include in context",
-        ge=1,
-        le=10
-    )
+    """Request for chat completion"""
+    query: str = Field(..., description="User's chat message")
+    conversation_id: Optional[str] = Field(None, description="ID of the conversation")
+    context_window_size: int = Field(default=5, description="Number of previous messages to include as context")
     metadata: Optional[Dict[str, Any]] = Field(
         None,
         description="Additional metadata for the conversation",
@@ -381,17 +288,9 @@ class ChatRequest(BaseModel):
         }
 
 class ChatResponse(BaseModel):
-    """Response model for chat interactions"""
-    response: str = Field(
-        ...,
-        description="Generated response text",
-        example="Our most popular dishes include the homemade lasagna and the fettuccine alfredo."
-    )
-    conversation_id: str = Field(
-        ...,
-        description="ID of the conversation",
-        example="conv_123456789"
-    )
+    """Response from chat completion"""
+    response: str = Field(..., description="Generated chat response")
+    conversation_id: str = Field(..., description="ID of the conversation")
     metadata: Optional[Dict[str, Any]] = Field(
         None,
         description="Additional metadata about the response",
@@ -542,25 +441,10 @@ class ConversationListResponse(BaseModel):
 
 # Error models
 class ErrorResponse(BaseModel):
-    """Model for error responses"""
-    error: str = Field(
-        ...,
-        description="Error type or code",
-        example="QUERY_PROCESSING_FAILED"
-    )
-    message: str = Field(
-        ...,
-        description="Human-readable error message",
-        example="Failed to process the query due to invalid input"
-    )
-    details: Optional[dict] = Field(
-        None,
-        description="Additional error details",
-        example={
-            "invalid_fields": ["query"],
-            "reason": "Query length exceeds maximum limit"
-        }
-    )
+    """Standard error response"""
+    error: str = Field(..., description="Error type")
+    message: str = Field(..., description="Error message")
+    details: Optional[Dict[str, Any]] = Field(None, description="Additional error details")
 
     class Config:
         json_schema_extra = {

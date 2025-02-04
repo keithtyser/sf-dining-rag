@@ -1,8 +1,9 @@
 import uuid
 import math
 import time
+import json
 from typing import Dict, List, Optional, Any
-from fastapi import FastAPI, HTTPException, Query, Depends, Request
+from fastapi import FastAPI, HTTPException, Query, Depends, Request, Body, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -22,17 +23,29 @@ from src.api.models import (
     MenuSection,
     QueryResult,
     RestaurantSearchRequest,
-    Restaurant
+    Restaurant,
+    RestaurantResult
 )
 from src.api.middleware import RequestLoggingMiddleware, setup_middleware
 from src.query import get_similar_chunks
 from src.chat import generate_response
-from src.conversation import ConversationManager
-from src.api.dependencies import get_openai_client, get_pinecone_index
+from src.conversation import ConversationManager, get_conversation_history, save_conversation
+from src.api.dependencies import (
+    get_rate_limiter,
+    get_chat_rate_limiter,
+    get_cleanup_rate_limiter,
+    get_default_rate_limiter,
+    limiter,
+    get_openai_client
+)
 from src.embedding import batch_generate_embeddings, get_embedding
 from src.vector_db import init_pinecone, upsert_embeddings, query_similar
 from openai import OpenAI
 from fastapi.responses import JSONResponse
+import logging
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 # API version and prefix
 API_VERSION = "1.0.0"
@@ -85,45 +98,105 @@ app.add_middleware(RequestLoggingMiddleware)
 # Initialize rate limiter
 limiter = Limiter(
     key_func=get_remote_address,
-    default_limits=["60/minute"],
+    default_limits=["60/minute"],  # Default limit for all endpoints
     headers_enabled=True,  # Enable rate limit headers
     strategy="fixed-window",  # Use fixed window strategy
 )
 app.state.limiter = limiter
 
-# Add rate limit middleware
+# Rate limit configurations for different endpoints
+CHAT_RATE_LIMIT = "30/minute"  # Chat endpoints
+CONVERSATION_RATE_LIMIT = "60/minute"  # Conversation management endpoints
+CLEANUP_RATE_LIMIT = "10/minute"  # Cleanup endpoint
+
+# Retry times in seconds for different endpoint types
+CHAT_RETRY_TIME = 30
+CONVERSATION_RETRY_TIME = 45
+CLEANUP_RETRY_TIME = 60  # Updated from 30 to 60 seconds
+
+# Add rate limit middleware with enhanced error handling
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
-    """Add rate limit headers to responses"""
+    """Add rate limit headers and handle rate limiting"""
     try:
         response = await call_next(request)
         return response
     except Exception as e:
         if isinstance(e, RateLimitExceeded):
-            return JSONResponse(
+            retry_after = CLEANUP_RETRY_TIME  # Default retry time
+            endpoint_type = "unknown"
+            
+            # Determine endpoint type for custom retry times
+            path = request.url.path
+            if "/chat" in path and "cleanup" not in path:
+                retry_after = CHAT_RETRY_TIME
+                endpoint_type = "chat"
+            elif "/conversations" in path:
+                retry_after = CONVERSATION_RETRY_TIME
+                endpoint_type = "conversation"
+            elif "/cleanup" in path:
+                retry_after = CLEANUP_RETRY_TIME
+                endpoint_type = "cleanup"
+            
+            return Response(
+                content=json.dumps({
+                    "detail": {
+                        "error": "rate_limit_exceeded",
+                        "message": f"Too many requests to {endpoint_type} endpoint. Please try again later.",
+                        "endpoint_type": endpoint_type,
+                        "retry_after": retry_after
+                    }
+                }),
                 status_code=429,
-                content={
-                    "error": "rate_limit_exceeded",
-                    "message": "Too many requests. Please try again later."
-                },
+                media_type="application/json",
                 headers={
-                    "Retry-After": "60"
+                    "Retry-After": str(retry_after),
+                    "X-RateLimit-Reset": str(int(time.time()) + retry_after)
                 }
             )
-        raise e
+        return Response(
+            content=json.dumps({
+                "detail": {
+                    "error": "internal_server_error",
+                    "message": str(e)
+                }
+            }),
+            status_code=500,
+            media_type="application/json"
+        )
 
 # Add exception handlers
 @app.exception_handler(RateLimitExceeded)
 async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
     """Handle rate limit exceeded errors"""
+    retry_after = CLEANUP_RETRY_TIME  # Default retry time
+    endpoint_type = "unknown"
+    
+    # Determine endpoint type for custom retry times
+    path = request.url.path
+    if "/chat" in path and "cleanup" not in path:
+        retry_after = CHAT_RETRY_TIME
+        endpoint_type = "chat"
+    elif "/conversations" in path:
+        retry_after = CONVERSATION_RETRY_TIME
+        endpoint_type = "conversation"
+    elif "/cleanup" in path:
+        retry_after = CLEANUP_RETRY_TIME
+        endpoint_type = "cleanup"
+    
     return JSONResponse(
         status_code=429,
         content={
-            "error": "rate_limit_exceeded",
-            "message": "Too many requests. Please try again later."
+            "detail": {
+                "error": "rate_limit_exceeded",
+                "message": f"Too many requests to {endpoint_type} endpoint. Please try again later.",
+                "endpoint_type": endpoint_type,
+                "retry_after": retry_after
+            }
         },
         headers={
-            "Retry-After": "60"
+            "Retry-After": str(retry_after),
+            "X-RateLimit-Reset": str(int(time.time()) + retry_after)
         }
     )
 
@@ -158,47 +231,43 @@ async def health_check(request: Request):
     summary="Query restaurant information",
     response_description="Returns a list of relevant restaurant information based on the query"
 )
-@limiter.limit("30/minute")
-async def query_restaurants(request: Request, query_request: QueryRequest):
-    """
-    Search for restaurant information using natural language queries.
-    
-    This endpoint uses semantic search to find relevant restaurant information based on the query.
-    The results are ranked by relevance score.
-    
-    Args:
-        query_request: The search query and optional parameters
-        
-    Returns:
-        QueryResponse: A list of restaurant results with relevance scores
-        
-    Raises:
-        HTTPException: If the query processing fails
-    
-    Example:
-        ```json
-        {
-            "query": "Italian restaurants with outdoor seating"
-        }
-        ```
-    """
+@get_default_rate_limiter()
+async def query_endpoint(request: Request, query_request: QueryRequest):
+    """Process a query and return relevant results"""
     try:
-        results = get_similar_chunks(query_request.query)
-        query_results = []
-        for result in results:
-            query_results.append(QueryResult(
-                restaurant=result.get("restaurant", "Unknown"),
-                rating=result.get("rating", "N/A"),
-                price_range=result.get("price_range", "N/A"),
-                description=result.get("description", ""),
-                score=result.get("score", 0.0)
-            ))
-        return QueryResponse(results=query_results)
+        if not query_request.query.strip():
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error": "validation_error",
+                    "message": "Query cannot be empty"
+                }
+            )
+
+        chunks = await get_similar_chunks(query_request.query)
+        results = []
+        for chunk in chunks:
+            metadata = chunk.get("metadata", {})
+            if metadata.get("type") == "restaurant_overview":
+                result = QueryResult(
+                    restaurant=metadata.get("restaurant_name", "Unknown"),
+                    rating=str(metadata.get("rating", "N/A")),
+                    price_range=metadata.get("price_range", "N/A"),
+                    description=metadata.get("text", ""),
+                    score=chunk.get("score", 0.0)
+                )
+                results.append(result)
+
+        return QueryResponse(results=results)
+
+    except HTTPException as e:
+        raise e
     except Exception as e:
+        logger.error(f"Error processing query: {str(e)}")
         raise HTTPException(
-            status_code=400,
+            status_code=500,
             detail={
-                "error": "Query processing failed",
+                "error": "query_processing_failed",
                 "message": str(e)
             }
         )
@@ -207,50 +276,48 @@ async def query_restaurants(request: Request, query_request: QueryRequest):
     f"{API_PREFIX}/chat",
     response_model=ChatResponse,
     tags=["chat"],
-    summary="Generate chat response",
-    response_description="Returns an AI-generated response based on the conversation context"
+    summary="Process a chat message"
 )
-@limiter.limit("30/minute")
-async def chat_completion(
+@get_chat_rate_limiter()
+async def chat_endpoint(
     request: Request,
     chat_request: ChatRequest,
     openai_client: OpenAI = Depends(get_openai_client)
 ):
-    """
-    Generate a chat response based on the user's query and conversation context.
-    
-    Args:
-        chat_request (ChatRequest): The chat request containing the query and optional conversation ID
-        openai_client (OpenAI): The OpenAI client for generating responses
-        
-    Returns:
-        ChatResponse: The generated response and conversation details
-    """
+    """Process a chat message and return a response"""
     try:
-        # Generate conversation ID if not provided
-        conversation_id = chat_request.conversation_id or str(uuid.uuid4())
+        # Get conversation history
+        history = await get_conversation_history(chat_request.conversation_id)
+        
+        # Get relevant chunks
+        chunks = await get_similar_chunks(chat_request.query)
+        context = "\n".join([chunk.get("text", "") for chunk in chunks])
         
         # Generate response
+        conversation_id = chat_request.conversation_id or str(uuid.uuid4())
         response = await generate_response(
             query=chat_request.query,
             conversation_id=conversation_id,
             client=openai_client,
-            get_similar_chunks=get_similar_chunks,
-            context_window_size=chat_request.context_window_size
+            get_similar_chunks=get_similar_chunks
         )
         
-        if not response:
-            raise Exception("Failed to generate response")
-            
+        # Save conversation
+        await save_conversation(conversation_id, chat_request.query, response)
+        
         return ChatResponse(
             response=response,
             conversation_id=conversation_id
         )
+
+    except HTTPException as e:
+        raise e
     except Exception as e:
+        logger.error(f"Error processing chat: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail={
-                "error": "Chat completion failed",
+                "error": "chat_processing_failed",
                 "message": str(e)
             }
         )
@@ -288,7 +355,7 @@ async def get_recent_conversations(
     """
     try:
         conversations = conversation_manager.get_recent_conversations(limit=limit)
-        return [conv.to_dict() for conv in conversations]
+        return JSONResponse(content=[conv.to_dict() for conv in conversations])
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -298,13 +365,13 @@ async def get_recent_conversations(
             }
         )
 
-@app.delete(
+@app.post(
     f"{API_PREFIX}/conversations/cleanup",
     tags=["conversations"],
     summary="Clean up old conversations",
     response_description="Returns the status of the cleanup operation"
 )
-@limiter.limit("10/minute")
+@limiter.limit(CLEANUP_RATE_LIMIT)
 async def cleanup_old_conversations(
     request: Request,
     days_old: int = Query(30, ge=1, description="Age in days of conversations to clean up")
@@ -413,93 +480,62 @@ def process_restaurant_results(results: List[Dict], page: int = 1, page_size: in
         total_pages=total_pages
     )
 
-@app.post(f"{API_PREFIX}/restaurants", response_model=RestaurantSearchResponse)
-@limiter.limit("30/minute")
-async def search_restaurants(request: Request, search_request: RestaurantSearchRequest):
-    """Search for restaurants with filters"""
+@app.post(
+    f"{API_PREFIX}/restaurants",
+    response_model=RestaurantSearchResponse,
+    tags=["restaurants"],
+    summary="Search for restaurants",
+    response_description="Returns a list of restaurants matching the search criteria"
+)
+@get_default_rate_limiter()
+async def restaurants_endpoint(request: Request, search_request: RestaurantSearchRequest):
+    """Search for restaurants based on criteria"""
     try:
-        # Initialize Pinecone
-        index = init_pinecone()
-        if not index:
-            raise HTTPException(
-                status_code=500,
-                detail={"error": "database_error", "message": "Failed to connect to vector database"}
+        # Get restaurant results
+        chunks = await get_similar_chunks(search_request.query)
+        
+        # Filter results based on criteria
+        filtered_results = []
+        for chunk in chunks:
+            metadata = chunk.get("metadata", {})
+            if metadata.get("type") != "restaurant_overview":
+                continue
+                
+            if (search_request.price_range and metadata.get("price_range") != search_request.price_range) or \
+               (search_request.min_rating and metadata.get("rating", 0) < search_request.min_rating):
+                continue
+                
+            result = RestaurantResult(
+                restaurant_name=metadata.get("restaurant_name", "Unknown"),
+                rating=metadata.get("rating", 0.0),
+                price_range=metadata.get("price_range", "N/A"),
+                description=metadata.get("text", ""),
+                score=chunk.get("score", 0.0)
             )
+            filtered_results.append(result)
 
-        # Get query embedding if query is provided
-        query_embedding = None
-        if search_request.query:
-            query_embedding = await get_embedding(search_request.query)
-            if not query_embedding:
-                raise HTTPException(
-                    status_code=500,
-                    detail={"error": "embedding_error", "message": "Failed to generate query embedding"}
-                )
-
-        # Prepare filter based on search parameters
-        filter_dict = {}
-        if search_request.price_range:
-            filter_dict["price_range"] = search_request.price_range
-        if search_request.min_rating:
-            filter_dict["rating"] = {"$gte": search_request.min_rating}
-
-        # Query similar restaurants
-        if query_embedding:
-            results = query_similar(
-                index=index,
-                query_embedding=query_embedding,
-                top_k=50,  # Get more results for filtering
-                score_threshold=0.7,
-                filter=filter_dict if filter_dict else None
-            )
-        else:
-            # If no query, get all restaurants matching filters
-            results = query_similar(
-                index=index,
-                query_embedding=[0] * 1536,  # Dummy embedding
-                top_k=50,
-                score_threshold=0,
-                filter=filter_dict if filter_dict else None
-            )
-
-        # Convert results to RestaurantDetails objects
-        restaurants = []
-        for result in results:
-            metadata = result["metadata"]
-            restaurants.append(
-                RestaurantDetails(
-                    id=result["id"],
-                    name=metadata.get("restaurant_name", "Unknown"),
-                    rating=float(metadata.get("rating", 0)),
-                    price_range=metadata.get("price_range", "$"),
-                    description=metadata.get("description", ""),
-                    cuisine_type=metadata.get("cuisine_type", "Unknown"),
-                    location=metadata.get("location", "Unknown"),
-                    popular_dishes=metadata.get("popular_dishes", [])
-                )
-            )
-
-        # Apply pagination
-        total_results = len(restaurants)
-        total_pages = (total_results + search_request.page_size - 1) // search_request.page_size
-        start = (search_request.page - 1) * search_request.page_size
-        end = start + search_request.page_size
-        paginated = restaurants[start:end]
-
+        # Paginate results
+        start_idx = (search_request.page - 1) * search_request.page_size
+        end_idx = start_idx + search_request.page_size
+        paginated_results = filtered_results[start_idx:end_idx]
+        
         return RestaurantSearchResponse(
-            restaurants=paginated,
-            total_results=total_results,
-            total_pages=total_pages,
+            restaurants=paginated_results,
+            total_results=len(filtered_results),
             page=search_request.page,
             page_size=search_request.page_size
         )
 
-    except HTTPException:
-        raise
+    except HTTPException as e:
+        raise e
     except Exception as e:
+        logger.error(f"Error processing restaurant search: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail={"error": "search_error", "message": f"Error searching restaurants: {str(e)}"}
+            detail={
+                "error": "restaurant_search_failed",
+                "message": str(e)
+            }
         )
 
 @app.get(f"{API_PREFIX}/restaurants/{{restaurant_id}}", response_model=RestaurantDetails, responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}})
@@ -595,21 +631,35 @@ async def get_conversation(request: Request, conversation_id: str):
     f"{API_PREFIX}/chat/cleanup",
     tags=["chat"],
     summary="Clean up old conversations",
-    response_description="Returns the cleanup status"
+    response_description="Returns the status of the cleanup operation"
 )
-@limiter.limit("10/minute")
-async def cleanup_conversations(request: Request, days_old: int = 30):
-    """
-    Clean up conversations older than the specified number of days.
-    
-    Args:
-        days_old (int): Number of days after which conversations should be cleaned up
-        
-    Returns:
-        dict: Status of the cleanup operation
-    """
+@get_cleanup_rate_limiter()
+async def cleanup_conversations(request: Request, cleanup_request: dict = Body(...)):
+    """Clean up old conversations"""
     try:
+        days_old = cleanup_request.get("days_old", 30)
+        if not isinstance(days_old, int) or days_old < 1:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error": "validation_error",
+                    "message": "days_old must be a positive integer"
+                }
+            )
+            
         conversation_manager.cleanup_old_conversations(days_old=days_old)
-        return {"status": "success", "message": "Old conversations cleaned up"}
+        return {
+            "status": "success",
+            "message": f"Cleaned up conversations older than {days_old} days"
+        }
+    except HTTPException as e:
+        raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) 
+        logger.error(f"Error cleaning up conversations: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "cleanup_failed",
+                "message": str(e)
+            }
+        ) 

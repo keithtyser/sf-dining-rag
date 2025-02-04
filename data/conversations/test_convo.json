@@ -1,0 +1,75 @@
+{
+  "id": "test_convo",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Tell me about Test Restaurant",
+      "timestamp": 1738708434.8677104,
+      "metadata": {
+        "timestamp": 1738708434.8677104,
+        "context_chunks": 0,
+        "type": "user_query"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "This is a test response",
+      "timestamp": 1738708434.8682063,
+      "metadata": {
+        "timestamp": 1738708434.8682063,
+        "model": "gpt-3.5-turbo",
+        "temperature": 0.7,
+        "max_tokens": 500,
+        "type": "assistant_response"
+      }
+    },
+    {
+      "role": "user",
+      "content": "This should fail",
+      "timestamp": 1738708437.589784,
+      "metadata": {
+        "timestamp": 1738708437.589784,
+        "context_chunks": 0,
+        "type": "user_query"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "This is a test response",
+      "timestamp": 1738708437.5902793,
+      "metadata": {
+        "timestamp": 1738708437.5902793,
+        "model": "gpt-3.5-turbo",
+        "temperature": 0.7,
+        "max_tokens": 500,
+        "type": "assistant_response"
+      }
+    },
+    {
+      "role": "user",
+      "content": "Test query",
+      "timestamp": 1738708438.5951848,
+      "metadata": {
+        "timestamp": 1738708438.5951848,
+        "context_chunks": 0,
+        "type": "user_query"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "This is a test response",
+      "timestamp": 1738708438.596177,
+      "metadata": {
+        "timestamp": 1738708438.596177,
+        "model": "gpt-3.5-turbo",
+        "temperature": 0.7,
+        "max_tokens": 500,
+        "type": "assistant_response"
+      }
+    }
+  ],
+  "metadata": {},
+  "max_messages": 50,
+  "created_at": 1738708434.6534362,
+  "last_updated": 1738708438.596177
+}

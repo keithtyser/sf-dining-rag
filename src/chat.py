@@ -8,7 +8,7 @@ from typing import List, Dict, Any, Optional, Callable, Awaitable
 from dotenv import load_dotenv
 from openai import OpenAI
 from src.embedding import get_embedding
-from src.conversation import ConversationManager, Message
+from src.conversation import ConversationManager, Message, Conversation
 import time
 
 # Load environment variables
@@ -42,8 +42,14 @@ async def generate_response(
         Optional[str]: Generated response or None if generation fails
     """
     try:
-        # Get conversation
+        # Get conversation or create new one
         conversation = conversation_manager.get_conversation(conversation_id)
+        if not conversation:
+            conversation = Conversation(
+                id=conversation_id,
+                storage_dir=conversation_manager.storage_dir
+            )
+            conversation_manager.conversations[conversation_id] = conversation
         
         # Get relevant context from vector search
         context_chunks = await get_similar_chunks(query, top_k=3)
@@ -53,8 +59,7 @@ async def generate_response(
         ])
         
         # Add user message to conversation first
-        conversation_manager.add_message(
-            conversation_id=conversation_id,
+        conversation.add_message(
             role="user",
             content=query,
             metadata={
@@ -77,34 +82,44 @@ async def generate_response(
             "restaurant-related information."
         )
         
-        user_prompt = f"Question: {query}\n\nRelevant Context:\n{context_text}"
-        
         # Prepare messages for API call
         messages = [{"role": "system", "content": system_prompt}]
-        messages.extend(conversation_context)
+        
+        # Add context if available
+        if context_text:
+            messages.append({
+                "role": "system",
+                "content": f"Here is some relevant information:\n\n{context_text}"
+            })
+        
+        # Add conversation history
+        messages.extend([
+            {"role": msg["role"], "content": msg["content"]}
+            for msg in conversation_context
+        ])
+        
+        # Add current query
+        messages.append({"role": "user", "content": query})
         
         # Generate response
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=messages,
             max_tokens=max_tokens,
-            temperature=temperature,
-            n=1,
-            stop=None
+            temperature=temperature
         )
         
-        response_text = response.choices[0].message.content.strip()
+        # Extract response text
+        response_text = response.choices[0].message.content
         
-        # Add assistant message to conversation
-        conversation_manager.add_message(
-            conversation_id=conversation_id,
+        # Add assistant response to conversation
+        conversation.add_message(
             role="assistant",
             content=response_text,
             metadata={
                 "timestamp": time.time(),
                 "model": "gpt-3.5-turbo",
-                "temperature": temperature,
-                "max_tokens": max_tokens,
+                "tokens": response.usage.total_tokens,
                 "type": "assistant_response"
             }
         )
