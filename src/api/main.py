@@ -19,6 +19,7 @@ from api.models import (
     RestaurantSearchResponse,
     MenuSection
 )
+from api.middleware import RequestLoggingMiddleware
 from query import get_similar_chunks
 from chat import generate_response, ConversationHistory
 
@@ -44,6 +45,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add request logging middleware
+app.add_middleware(RequestLoggingMiddleware)
 
 # Store conversation histories
 conversations: Dict[str, ConversationHistory] = {}
