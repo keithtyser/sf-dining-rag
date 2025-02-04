@@ -32,13 +32,13 @@
   - [x] CORS handling
   - [x] Error handling
   - [x] Request validation
+  - [x] Rate limiting
 - [x] Add API documentation using FastAPI's built-in Swagger UI
 
 ## Next Steps
 
 ### 1. Complete API Development
 - [ ] Enhance middleware:
-  - [ ] Add rate limiting
   - [ ] Add request logging
   - [ ] Add response compression
 - [ ] Add API versioning

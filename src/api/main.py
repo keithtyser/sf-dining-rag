@@ -1,8 +1,11 @@
 import uuid
 import math
 from typing import Dict, List, Optional
-from fastapi import FastAPI, HTTPException, Query, Depends
+from fastapi import FastAPI, HTTPException, Query, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from api.models import (
     QueryRequest,
     ChatRequest,
@@ -19,12 +22,19 @@ from api.models import (
 from query import get_similar_chunks
 from chat import generate_response, ConversationHistory
 
+# Create rate limiter
+limiter = Limiter(key_func=get_remote_address)
+
 # Create FastAPI app
 app = FastAPI(
     title="Restaurant Assistant API",
     description="API for querying restaurant information and chatting about restaurants",
     version="1.0.0"
 )
+
+# Add rate limiter to app
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Add CORS middleware
 app.add_middleware(
@@ -39,7 +49,8 @@ app.add_middleware(
 conversations: Dict[str, ConversationHistory] = {}
 
 @app.get("/")
-async def root():
+@limiter.limit("10/minute")
+async def root(request: Request):
     """Root endpoint returning API information"""
     return {
         "name": "Restaurant Assistant API",
@@ -48,7 +59,8 @@ async def root():
     }
 
 @app.post("/api/query", response_model=QueryResponse, responses={400: {"model": ErrorResponse}})
-async def query_restaurants(request: QueryRequest):
+@limiter.limit("30/minute")
+async def query_restaurants(request: Request, query_request: QueryRequest):
     """
     Query for restaurant information
     
@@ -58,9 +70,9 @@ async def query_restaurants(request: QueryRequest):
     try:
         # Get similar chunks from vector search
         results = get_similar_chunks(
-            request.query,
-            top_k=request.top_k,
-            score_threshold=request.score_threshold
+            query_request.query,
+            top_k=query_request.top_k,
+            score_threshold=query_request.score_threshold
         )
         
         # Process results into response format
@@ -103,7 +115,8 @@ async def query_restaurants(request: QueryRequest):
         )
 
 @app.post("/api/chat", response_model=ChatResponse, responses={400: {"model": ErrorResponse}})
-async def chat(request: ChatRequest):
+@limiter.limit("20/minute")
+async def chat(request: Request, chat_request: ChatRequest):
     """
     Chat with the restaurant assistant
     
@@ -112,24 +125,24 @@ async def chat(request: ChatRequest):
     """
     try:
         # Get or create conversation history
-        conversation_id = request.conversation_id or str(uuid.uuid4())
+        conversation_id = chat_request.conversation_id or str(uuid.uuid4())
         if conversation_id not in conversations:
             conversations[conversation_id] = ConversationHistory()
         
         # Generate response
         response_text = generate_response(
-            query=request.query,
+            query=chat_request.query,
             conversation_history=conversations[conversation_id],
-            model=request.model,
-            temperature=request.temperature,
-            max_tokens=request.max_tokens
+            model=chat_request.model,
+            temperature=chat_request.temperature,
+            max_tokens=chat_request.max_tokens
         )
         
         if not response_text:
             raise Exception("Failed to generate response")
         
         # Get context used for the response
-        context_results = get_similar_chunks(request.query, top_k=3)
+        context_results = get_similar_chunks(chat_request.query, top_k=3)
         
         # Process context results
         restaurants = []
@@ -247,9 +260,8 @@ def process_restaurant_results(results: List[Dict], page: int = 1, page_size: in
     )
 
 @app.get("/api/restaurants", response_model=RestaurantSearchResponse, responses={400: {"model": ErrorResponse}})
-async def search_restaurants(
-    params: RestaurantSearchParams = Depends()
-):
+@limiter.limit("30/minute")
+async def search_restaurants(request: Request, params: RestaurantSearchParams = Depends()):
     """
     Search for restaurants with filtering and pagination
     
@@ -309,9 +321,8 @@ async def search_restaurants(
         )
 
 @app.get("/api/restaurants/{restaurant_id}", response_model=RestaurantDetails, responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}})
-async def get_restaurant_details(
-    restaurant_id: str
-):
+@limiter.limit("30/minute")
+async def get_restaurant_details(request: Request, restaurant_id: str):
     """
     Get detailed information about a specific restaurant
     
