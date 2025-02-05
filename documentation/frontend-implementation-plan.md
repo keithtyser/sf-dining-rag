@@ -1,6 +1,6 @@
 # Frontend Implementation Plan: RAG Pipeline Visualization
 
-This document outlines the step-by-step implementation plan for creating an innovative, technical UI that visualizes the RAG (Retrieval-Augmented Generation) pipeline in real-time. The UI will show actual data processing, vector space visualization, and performance metrics.
+This document outlines the step-by-step implementation plan for creating an innovative, technical UI that visualizes the RAG (Retrieval-Augmented Generation) pipeline in real-time. The UI will show actual data processing, vector space visualization, performance metrics, and provide an interactive chatbot interface.
 
 ## Table of Contents
 1. [Project Setup](#1-project-setup) ✅
@@ -10,7 +10,8 @@ This document outlines the step-by-step implementation plan for creating an inno
 5. [Performance Metrics](#5-performance-metrics)
 6. [Real-time Updates](#6-real-time-updates)
 7. [User Interface](#7-user-interface)
-8. [Testing & Optimization](#8-testing--optimization)
+8. [Chatbot Interface](#8-chatbot-interface)
+9. [Testing & Optimization](#9-testing--optimization)
 
 ## Latest Updates (2025-02-04)
 
@@ -110,41 +111,87 @@ This document outlines the step-by-step implementation plan for creating an inno
 
 ### 2.2 Common UI Components
 - [x] Create Button component with variants
-  - Default, Primary, Secondary
+  - Primary, Secondary, Destructive variants
   - Outline, Ghost, Link variants
-  - Multiple sizes
+  - Multiple sizes (sm, default, lg, icon)
+  - Loading state support
   - Storybook documentation
 - [x] Create Card component for info displays
-  - Multiple variants and sizes
-  - Composable sub-components
-  - Interactive hover states
+  - Multiple variants (default, outline, ghost, elevated)
+  - Size variations (sm, default, lg)
+  - Interactive hover states (lift, highlight)
+  - Composable sub-components (Header, Title, Description, Content, Footer)
   - Comprehensive Storybook examples
 - [x] Create Input component
-  - Multiple variants and states
-  - Error and success handling
-  - Size variations
+  - Multiple variants (default, ghost, error, success)
+  - Size variations (sm, default, lg)
+  - Error and success states with messages
+  - Full TypeScript support
   - Accessibility support
+  - Storybook stories
 - [x] Create Modal component
-  - Radix UI integration
-  - Multiple sizes
+  - Radix UI Dialog integration
+  - Multiple sizes (sm, default, lg, xl, full)
+  - Composable parts (Header, Title, Description, Footer)
   - Animated transitions
   - Accessible dialogs
-- [ ] Create Toast notifications
-- [ ] Implement Loading states/spinners
+  - Storybook stories
+- [x] Create Toast notifications
+  - Custom hook for managing toasts
+  - Multiple variants (success, error, info, warning)
+  - Configurable duration
+  - Action support
+  - Automatic dismissal
+  - Storybook stories
+- [x] Create Form components
+  - Form container with validation context
+  - FormField for field state management
+  - FormItem for layout
+  - FormLabel for accessibility
+  - FormControl for input wrapping
+  - FormDescription for helper text
+  - FormMessage for error display
+  - Integration with React Hook Form
+  - Zod schema validation
+  - Storybook stories
 
 ### 2.3 Data Display Components
-- [ ] Create DataTable component
-- [ ] Create CodeBlock component for showing text chunks
+- [x] Create DataTable component
+  - Built with @tanstack/react-table
+  - Sorting functionality
+  - Column filtering
+  - Pagination controls
+  - Row selection
+  - Responsive design
+  - Accessibility support
+  - TypeScript integration
+  - Storybook stories
+- [x] Create CodeBlock component
+  - Syntax highlighting with Shiki
+  - Multiple variants (default, ghost)
+  - Size variations (sm, default, lg)
+  - Line numbers support
+  - Line highlighting
+  - Language detection
+  - Captions support
+  - Accessible design
+  - Storybook stories
 - [ ] Create MetricsCard component
 - [ ] Create Timeline component
 
 ## 3. Pipeline Visualization
 
 ### 3.1 Data Ingestion Visualization
-- [ ] Create FileUploadVisualizer component
-  - Show file parsing progress
-  - Display document statistics
-  - Show preprocessing steps
+- [x] Create DataSourceVisualizer component
+  - CSV data loading visualization
+  - Wikipedia scraping progress
+  - Text preprocessing stages
+  - Chunking visualization
+  - Embedding generation progress
+  - Real-time statistics
+  - Error handling
+  - Stage-by-stage progress
+  - Storybook stories
 - [ ] Implement text chunk visualization
   - Display chunk boundaries
   - Show token counts
@@ -246,16 +293,83 @@ This document outlines the step-by-step implementation plan for creating an inno
 - [ ] Add data export functionality
 - [ ] Implement filtering and search
 
-## 8. Testing & Optimization
+## 8. Chatbot Interface
 
-### 8.1 Testing
+### 8.1 Chat Components
+- [ ] Create ChatContainer component
+  - Message list with virtualization
+  - Input area with commands support
+  - Typing indicators
+  - Error handling states
+  - Loading states for responses
+  - Support for markdown and code blocks
+  - Copy to clipboard functionality
+
+### 8.2 Message Components
+- [ ] Create MessageBubble component
+  - User and assistant message variants
+  - Support for different content types (text, code, images)
+  - Timestamp display
+  - Message status indicators
+  - Retry/regenerate options for failed messages
+  - Reactions/feedback options
+
+### 8.3 Input Components
+- [ ] Create ChatInput component
+  - Auto-expanding textarea
+  - File attachment support
+  - Command palette integration (/commands)
+  - Keyboard shortcuts
+  - Character count
+  - Mobile-friendly interface
+
+### 8.4 Context Display
+- [ ] Create ContextPanel component
+  - Show retrieved documents/chunks
+  - Highlight relevant passages
+  - Display similarity scores
+  - Allow context editing/filtering
+  - Source document links
+  - Context history navigation
+
+### 8.5 Chat Features
+- [ ] Implement conversation management
+  - Conversation persistence
+  - History navigation
+  - Conversation naming/organization
+  - Export functionality
+  - Clear conversation option
+  - Conversation search
+
+### 8.6 Advanced Features
+- [ ] Add advanced chat capabilities
+  - Stream responses in real-time
+  - Support for system prompts
+  - Temperature/creativity controls
+  - Model parameter adjustments
+  - Prompt templates
+  - Chat state persistence
+  - Multi-modal input support
+
+### 8.7 Integration Features
+- [ ] Integrate with RAG pipeline
+  - Real-time retrieval visualization
+  - Query preprocessing display
+  - Response generation progress
+  - Token usage tracking
+  - Error recovery mechanisms
+  - Performance optimization
+
+## 9. Testing & Optimization
+
+### 9.1 Testing
 - [ ] Write unit tests for all components
 - [ ] Create integration tests
 - [ ] Add E2E tests for main flows
 - [ ] Test real-time updates
 - [ ] Verify performance metrics
 
-### 8.2 Optimization
+### 9.2 Optimization
 - [ ] Optimize 3D rendering performance
 - [ ] Implement component lazy loading
 - [ ] Add data caching
@@ -267,12 +381,13 @@ This document outlines the step-by-step implementation plan for creating an inno
 Use this section to track overall progress:
 
 - [x] Project Setup (3/3 sections complete)
-- [ ] Core Components (4/6 sections complete)
-- [ ] Pipeline Visualization (0/3 sections complete)
+- [x] Core Components (6/6 sections complete)
+- [ ] Pipeline Visualization (1/3 sections complete)
 - [ ] Vector Space Visualization (0/2 sections complete)
 - [ ] Performance Metrics (0/2 sections complete)
 - [ ] Real-time Updates (0/2 sections complete)
 - [ ] User Interface (0/2 sections complete)
+- [ ] Chatbot Interface (0/7 sections complete)
 - [ ] Testing & Optimization (0/2 sections complete)
 
 ## Notes for Junior Developers
