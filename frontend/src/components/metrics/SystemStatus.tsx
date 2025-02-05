@@ -16,6 +16,8 @@ import {
   Shield,
   Zap,
 } from 'lucide-react';
+import { useWebSocketMulti } from '@/hooks/useWebSocket';
+import { WebSocketEvent } from '@/lib/websocket/WebSocketManager';
 
 interface ServiceStatus {
   name: string;
@@ -33,6 +35,29 @@ interface RateLimit {
   resetTime: number;
   used: number;
 }
+
+interface DatabaseConnections {
+  active: number;
+  idle: number;
+  max: number;
+  queued: number;
+}
+
+interface ErrorRates {
+  last1m: number;
+  last5m: number;
+  last15m: number;
+  last1h: number;
+}
+
+type SystemStatusData = {
+  'system:status': ServiceStatus[];
+  'error:rate': ErrorRates;
+  'db:connections': DatabaseConnections;
+  'rate:limits': RateLimit[];
+  'pipeline:status': never;
+  'metrics:update': never;
+};
 
 interface SystemStatusProps {
   className?: string;
@@ -94,14 +119,26 @@ const getServiceIcon = (name: string) => {
   }
 };
 
-export function SystemStatus({
-  className,
-  services,
-  rateLimits,
-  databaseConnections,
-  errorRates,
-  lastUpdate,
-}: SystemStatusProps) {
+export function SystemStatus({ className }: { className?: string }) {
+  const events: WebSocketEvent[] = ['system:status', 'error:rate', 'db:connections', 'rate:limits'];
+  const { data, connectionState } = useWebSocketMulti<SystemStatusData>(events);
+
+  // Use real-time data or fallback to initial states
+  const services = data['system:status'] || [];
+  const errorRates = data['error:rate'] || {
+    last1m: 0,
+    last5m: 0,
+    last15m: 0,
+    last1h: 0,
+  };
+  const databaseConnections = data['db:connections'] || {
+    active: 0,
+    idle: 0,
+    max: 100,
+    queued: 0,
+  };
+  const rateLimits = data['rate:limits'] || [];
+
   // Calculate overall system status
   const overallStatus = services.every(s => s.status === 'operational')
     ? 'operational'
@@ -128,7 +165,7 @@ export function SystemStatus({
           </div>
           <div className="flex items-center gap-4">
             <div className="text-sm text-muted-foreground">
-              Last updated: {new Date(lastUpdate).toLocaleTimeString()}
+              Connection: {connectionState}
             </div>
             <div
               className={cn(
