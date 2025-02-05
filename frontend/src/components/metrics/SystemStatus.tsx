@@ -19,7 +19,7 @@ import {
 import { useWebSocketMulti } from '@/hooks/useWebSocket';
 import { WebSocketEvent } from '@/lib/websocket/WebSocketManager';
 
-interface ServiceStatus {
+export interface ServiceStatus {
   name: string;
   status: 'operational' | 'degraded' | 'down';
   latency?: number;
@@ -28,7 +28,7 @@ interface ServiceStatus {
   message?: string;
 }
 
-interface RateLimit {
+export interface RateLimit {
   endpoint: string;
   limit: number;
   remaining: number;
@@ -36,14 +36,14 @@ interface RateLimit {
   used: number;
 }
 
-interface DatabaseConnections {
+export interface DatabaseConnections {
   active: number;
   idle: number;
   max: number;
   queued: number;
 }
 
-interface ErrorRates {
+export interface ErrorRates {
   last1m: number;
   last5m: number;
   last15m: number;
