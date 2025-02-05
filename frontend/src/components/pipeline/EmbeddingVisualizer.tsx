@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 import { Card } from '../ui/Card';
 import { Progress } from '../ui/Progress';
 import { CodeBlock } from '../ui/CodeBlock';
-import { ArrowRight, Binary, Cpu, Server } from 'lucide-react';
+import { ArrowRight, Binary, Cpu, Server, Clock, Zap, AlertCircle } from 'lucide-react';
 
 interface EmbeddingBatch {
   id: string;
@@ -13,6 +13,27 @@ interface EmbeddingBatch {
   status: 'pending' | 'processing' | 'complete' | 'error';
   error?: string;
   apiLatency?: number;
+  apiCalls?: {
+    timestamp: number;
+    endpoint: string;
+    requestSize: number;
+    responseSize: number;
+    duration: number;
+    status: number;
+    error?: string;
+  }[];
+  processingDetails?: {
+    tokenization?: {
+      startTime: number;
+      endTime: number;
+      tokenCount: number;
+    };
+    embedding?: {
+      startTime: number;
+      endTime: number;
+      dimensions: number;
+    };
+  };
 }
 
 interface EmbeddingVisualizerProps {
@@ -36,6 +57,12 @@ export function EmbeddingVisualizer({
   const completedBatches = batches.filter(b => b.status === 'complete').length;
   const totalProgress = (completedBatches / batches.length) * 100;
 
+  // Calculate average API latency
+  const avgLatency = batches.reduce((sum, b) => sum + (b.apiLatency || 0), 0) / completedBatches || 0;
+
+  // Calculate total tokens processed
+  const totalTokens = batches.reduce((sum, b) => sum + b.tokens, 0);
+
   return (
     <div className={cn('space-y-6', className)}>
       {/* Overview Card */}
@@ -56,6 +83,35 @@ export function EmbeddingVisualizer({
           <div>
             <div className="text-sm text-muted-foreground">API Endpoint</div>
             <div className="font-medium truncate">{apiEndpoint}</div>
+          </div>
+        </div>
+      </Card>
+
+      {/* Performance Metrics */}
+      <Card className="p-4">
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Clock className="h-4 w-4" />
+              <span>Average Latency</span>
+            </div>
+            <div className="font-medium">{avgLatency.toFixed(2)}ms</div>
+          </div>
+          <div>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Zap className="h-4 w-4" />
+              <span>Total Tokens</span>
+            </div>
+            <div className="font-medium">{totalTokens.toLocaleString()}</div>
+          </div>
+          <div>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <AlertCircle className="h-4 w-4" />
+              <span>Error Rate</span>
+            </div>
+            <div className="font-medium">
+              {((batches.filter(b => b.status === 'error').length / batches.length) * 100).toFixed(1)}%
+            </div>
           </div>
         </div>
       </Card>
@@ -148,10 +204,97 @@ export function EmbeddingVisualizer({
                   </div>
                 )}
               </div>
+              {/* Processing Details */}
+              {batch.processingDetails && (
+                <div className="col-span-2 space-y-4 rounded-md border p-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    {batch.processingDetails.tokenization && (
+                      <div>
+                        <div className="text-sm font-medium">Tokenization</div>
+                        <div className="mt-1 space-y-1 text-sm text-muted-foreground">
+                          <div>Tokens: {batch.processingDetails.tokenization.tokenCount}</div>
+                          <div>
+                            Duration:{' '}
+                            {(
+                              (batch.processingDetails.tokenization.endTime -
+                                batch.processingDetails.tokenization.startTime) /
+                              1000
+                            ).toFixed(2)}s
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {batch.processingDetails.embedding && (
+                      <div>
+                        <div className="text-sm font-medium">Embedding Generation</div>
+                        <div className="mt-1 space-y-1 text-sm text-muted-foreground">
+                          <div>Dimensions: {batch.processingDetails.embedding.dimensions}</div>
+                          <div>
+                            Duration:{' '}
+                            {(
+                              (batch.processingDetails.embedding.endTime -
+                                batch.processingDetails.embedding.startTime) /
+                              1000
+                            ).toFixed(2)}s
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+              {/* API Calls */}
+              {batch.apiCalls && batch.apiCalls.length > 0 && (
+                <div className="col-span-2 space-y-2">
+                  <div className="text-sm font-medium">API Calls</div>
+                  <div className="space-y-2">
+                    {batch.apiCalls.map((call, index) => (
+                      <div
+                        key={index}
+                        className={cn(
+                          'rounded-md border p-3',
+                          call.status >= 200 && call.status < 300
+                            ? 'border-green-500/20 bg-green-500/10'
+                            : 'border-destructive/20 bg-destructive/10'
+                        )}
+                      >
+                        <div className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                          <div>
+                            <div className="text-muted-foreground">Endpoint</div>
+                            <div className="font-medium truncate">{call.endpoint}</div>
+                          </div>
+                          <div>
+                            <div className="text-muted-foreground">Status</div>
+                            <div className="font-medium">{call.status}</div>
+                          </div>
+                          <div>
+                            <div className="text-muted-foreground">Duration</div>
+                            <div className="font-medium">{call.duration.toFixed(2)}ms</div>
+                          </div>
+                          <div>
+                            <div className="text-muted-foreground">Data Size</div>
+                            <div className="font-medium">
+                              {(call.requestSize / 1024).toFixed(1)}KB →{' '}
+                              {(call.responseSize / 1024).toFixed(1)}KB
+                            </div>
+                          </div>
+                          {call.error && (
+                            <div className="col-span-full mt-2 text-sm text-destructive">
+                              {call.error}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </Card>
         ))}
       </div>
     </div>
   );
-} 
+}
+
+EmbeddingVisualizer.displayName = 'EmbeddingVisualizer'; 
