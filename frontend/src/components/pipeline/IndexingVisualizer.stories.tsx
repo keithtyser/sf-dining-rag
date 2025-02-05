@@ -1,17 +1,17 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { IndexingVisualizer } from './IndexingVisualizer';
 
-const meta = {
+const meta: Meta<typeof IndexingVisualizer> = {
   title: 'Pipeline/IndexingVisualizer',
   component: IndexingVisualizer,
   parameters: {
     layout: 'padded',
   },
   tags: ['autodocs'],
-} satisfies Meta<typeof IndexingVisualizer>;
+};
 
 export default meta;
-type Story = StoryObj<typeof meta>;
+type Story = StoryObj<typeof IndexingVisualizer>;
 
 const sampleOperations = [
   {
