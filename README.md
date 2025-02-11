@@ -2,6 +2,8 @@
 
 This repository demonstrates a Retrieval Augmented Generation (RAG) pipeline that integrates both structured and unstructured data. It answers queries about restaurants, menus, ingredients, and more in San Francisco. The application uses OpenAI's 'gpt-4o' model for understanding questions and generating context-aware responses, while Pinecone is used for embedding storage vector-based similarity search.
 
+🚀 **Try it out**: [SF Dining Guide](https://www.sfdining.ai/)
+
 ![SF Dining Guide Landing Page](images/landing_page.png)
 
 ---
