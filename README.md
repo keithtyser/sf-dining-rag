@@ -1,6 +1,8 @@
-# San Francisco Dining RAG Chatbot
+# San Francisco Dining Guide RAG Chatbot
 
-This repository demonstrates a Retrieval Augmented Generation (RAG) pipeline that integrates both structured and unstructured data. It answers queries about restaurants, menus, ingredients, and more in San Francisco. The application uses OpenAI’s 'gpt-4o' model for understanding questions and generating context-aware responses, while Pinecone is used for embedding storage vector-based similarity search.
+This repository demonstrates a Retrieval Augmented Generation (RAG) pipeline that integrates both structured and unstructured data. It answers queries about restaurants, menus, ingredients, and more in San Francisco. The application uses OpenAI's 'gpt-4o' model for understanding questions and generating context-aware responses, while Pinecone is used for embedding storage vector-based similarity search.
+
+![SF Dining Guide Landing Page](images/landing_page.png)
 
 ---
 
@@ -11,9 +13,7 @@ This repository demonstrates a Retrieval Augmented Generation (RAG) pipeline tha
 4. [Data Ingestion & Indexing](#data-ingestion--indexing)  
    - [Five Chunk Types](#five-chunk-types)  
 5. [Prompt & Retrieval Pipeline](#prompt--retrieval-pipeline)  
-6. [Mermaid Diagram](#mermaid-diagram)  
-7. [Five User Stories/Queries (with Image Placeholders)](#five-user-storiesqueries-with-image-placeholders)  
-8. [Future Extensions & Scalability](#future-extensions--scalability)
+6. [Future Extensions & Scalability](#future-extensions--scalability)
 
 ---
 
@@ -30,15 +30,15 @@ This repository demonstrates a Retrieval Augmented Generation (RAG) pipeline tha
 
 ## Frontend Overview
 
-In addition to the “route.ts” file—which handles the streaming of chat responses—the frontend includes:
+In addition to the "route.ts" file—which handles the streaming of chat responses—the frontend includes:
 - A Next.js page or React component where users can type queries.  
 - Real-time updates that show partial LLM responses as they stream in.  
 
-In “route.ts,” the crucial flow is:
-1. We receive the user’s query.  
+In "route.ts," the crucial flow is:
+1. We receive the user's query.  
 2. (Optionally) optimize or rewrite the query for better retrieval.  
 3. Perform a Pinecone lookup on different indexes.  
-4. Assemble relevant context chunks and stream them (alongside the LLM’s final answer) back to the client.
+4. Assemble relevant context chunks and stream them (alongside the LLM's final answer) back to the client.
 
 ---
 
@@ -50,7 +50,7 @@ In “route.ts,” the crucial flow is:
    - Saves JSON chunks with metadata (date published, source, URL, etc.).
 
 2. **@wikipedia_scraper.py**  
-   - Uses Wikipedia’s API to get food/cuisine/restaurant-related articles.  
+   - Uses Wikipedia's API to get food/cuisine/restaurant-related articles.  
    - Cleans and splits articles into chunks.  
    - Stores them in JSON, ready for embedding.
 
@@ -70,7 +70,7 @@ In “route.ts,” the crucial flow is:
 6. **@rag_indexer.py**  
    - Handles the proprietary restaurant data (CSV files).  
    - Splits the data into chunks for different aspects (like categories, menu items, reviews).  
-   - Embeds each chunk and stores it in Pinecone (e.g., “restaurant-chatbot” index).
+   - Embeds each chunk and stores it in Pinecone (e.g., "restaurant-chatbot" index).
 
 ---
 
@@ -84,7 +84,7 @@ Below is the general procedure:
    - @rag_indexer.py for restaurant CSV data.
 
 2. **Generate Chunks**  
-   - Each script organizes text into smaller pieces (“chunks”) based on context, ensuring each chunk has relevant metadata.  
+   - Each script organizes text into smaller pieces ("chunks") based on context, ensuring each chunk has relevant metadata.  
 
 3. **Embedding & Vector Store Upload**  
    - @process_wikipedia_chunks.py and @process_news_chunks.py read the chunk files, generate embeddings, and upload to Pinecone.  
@@ -187,43 +187,11 @@ Below is the general procedure:
 
 ## Prompt & Retrieval Pipeline
 
-1. **User Query:** For example, “What’s the best cheap Italian restaurant near me?”  
+1. **User Query:** For example, "What's the best cheap Italian restaurant near me?"  
 2. **Query Embedding:** The system transforms the query text into a vector representation.  
 3. **Vector Search:** Pinecone returns the top matching chunks from each index.  
 4. **Prompt Construction:** These chunks are combined into a single prompt for the LLM.  
 5. **LLM Completion:** The LLM draws on these chunks plus instructions to generate a final answer.  
-
----
-
-## Mermaid Diagram
-
-Below is a simplified diagram of the code flow. An image version has been placed at [images/mermaid_diagram.png](images/mermaid_diagram.png):
-
-![Mermaid Diagram](images/mermaid_diagram.png)
-
----
-
-## Five User Stories/Queries
-
-1. **Ingredient-Based Discovery**  
-   - Query: "Which restaurants in San Francisco offer dishes with Impossible Meat?"  
-   ![Impossible Meat Search](images/user_story_1.png)
-
-2. **Trending Insights & Explanations**  
-   - Query: "Give me a summary of the latest trends around desserts in San Francisco."  
-   ![Dessert Trends](images/user_story_2.png)
-
-3. **Historical or Cultural Context**  
-   - Query: "What is the history of sushi, and which restaurants in my area are known for it?"  
-   ![Sushi History](images/user_story_3.png)
-
-4. **Comparative Analysis**  
-   - Query: "Compare the average menu price of vegan restaurants in San Francisco vs. Mexican restaurants."  
-   ![Price Comparison](images/user_story_4.png)
-
-5. **Menu Innovation & Flavor Trend**  
-   - Query: "How has the use of saffron in desserts changed over the last year, according to restaurant menus or news articles?"  
-   ![Saffron Trends](images/user_story_5.png)
 
 ---
 
