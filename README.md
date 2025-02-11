@@ -7,13 +7,23 @@ This repository demonstrates a Retrieval Augmented Generation (RAG) pipeline tha
 ---
 
 ## Table of Contents
-1. [Overview of the Architecture](#overview-of-the-architecture)  
-2. [Frontend Overview](#frontend-overview)  
-3. [Backend Key Scripts](#backend-key-scripts)  
-4. [Data Ingestion & Indexing](#data-ingestion--indexing)  
+1. [Tech Stack](#tech-stack)
+2. [Overview of the Architecture](#overview-of-the-architecture)  
+3. [Frontend Overview](#frontend-overview)  
+4. [Backend Key Scripts](#backend-key-scripts)  
+5. [Data Ingestion & Indexing](#data-ingestion--indexing)  
    - [Five Chunk Types](#five-chunk-types)  
-5. [Prompt & Retrieval Pipeline](#prompt--retrieval-pipeline)  
-6. [Future Extensions & Scalability](#future-extensions--scalability)
+6. [Prompt & Retrieval Pipeline](#prompt--retrieval-pipeline)  
+7. [Limitations](#limitations)
+8. [Future Extensions & Scalability](#future-extensions--scalability)
+9. [License](#license)
+---
+
+## Tech Stack
+- **Frontend**: Next.js, React, TypeScript
+- **Backend**: Python
+- **Vector DB**: Pinecone
+- **Embedding & LLM**: OpenAI API
 
 ---
 
@@ -195,12 +205,31 @@ Below is the general procedure:
 
 ---
 
+## Limitations
+
+1. **Geographic Scope**: Currently limited to San Francisco restaurants and dining establishments only.
+2. **Data Freshness**: Restaurant and news data do not reflect real-time changes.
+3. **Review Coverage**: Not all restaurants have the same depth of review data or menu information.
+4. **Language Support**: Currently supports English language queries only.
+5. **Rate Limits**: 
+   - OpenAI API rate limits apply to embeddings and completions
+   - Pinecone has query per second (QPS) limitations based on the service tier
+6. **Context Window**: Limited by the model's maximum context window size for processing historical conversation context.
+
+---
+
 ## Future Extensions & Scalability
 
 - **Real-Time Updates:** Extend the pipeline to handle incremental indexing of new or updated data.  
 - **More Data Sources:** Scrape additional sites or deeper Wikipedia categories.  
 - **Performance & Caching:** Cache frequently accessed queries or embeddings for speed.  
 - **Advanced Analytics:** Incorporate time-weighting or user feedback to prioritize certain results.
+
+---
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
