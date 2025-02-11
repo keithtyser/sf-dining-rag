@@ -18,15 +18,16 @@ interface ContextChunk {
   tokens: number;
   metadata: {
     source: string;
-    source_type: 'restaurant' | 'news' | 'wikipedia' | string;  // Add explicit source type
+    source_type: 'restaurant' | 'news' | 'wikipedia' | string;
     title: string;
+    text?: string;
     restaurant: string;
     category: string;
     item_name: string;
     description: string;
     ingredients: string[];
     categories: string[];
-    keywords: string[];  // Add keywords field
+    keywords: string[];
     rating: number;
     review_count: number;
     price: string;
@@ -34,8 +35,18 @@ interface ContextChunk {
     position: number;
     similarity: number;
     tokens: number;
-    publish_date?: string;  // Add optional publish_date field
-    summary?: string;  // Add summary field for wikipedia entries
+    publish_date?: string;
+    summary?: string;
+  };
+}
+
+// Add these type definitions after the ContextChunk interface
+interface SanitizedChunk extends ContextChunk {
+  metadata: ContextChunk['metadata'] & {
+    text?: string;
+    title?: string;
+    description?: string;
+    summary?: string;
   };
 }
 
@@ -167,6 +178,30 @@ async function queryPineconeIndex(queryEmbedding: number[], indexName: string, p
     });
     return { matches: [] };
   }
+}
+
+// Add this helper function at the top level
+function sanitizeText(text: string): string {
+  return text
+    .replace(/\\/g, '\\\\')  // Escape backslashes first
+    .replace(/\n/g, '\\n')   // Replace newlines with \n
+    .replace(/\r/g, '\\r')   // Replace carriage returns
+    .replace(/\t/g, '\\t')   // Replace tabs
+    .replace(/"/g, '\\"');   // Escape quotes
+}
+
+function sanitizeChunk(chunk: ContextChunk): SanitizedChunk {
+  return {
+    ...chunk,
+    text: sanitizeText(chunk.text || ''),
+    metadata: {
+      ...chunk.metadata,
+      text: chunk.metadata?.text ? sanitizeText(chunk.metadata.text) : '',
+      title: chunk.metadata?.title ? sanitizeText(chunk.metadata.title) : '',
+      description: chunk.metadata?.description ? sanitizeText(chunk.metadata.description) : '',
+      summary: chunk.metadata?.summary ? sanitizeText(chunk.metadata.summary) : '',
+    }
+  };
 }
 
 export async function POST(req: NextRequest) {
@@ -400,43 +435,16 @@ ${formatChunks(newsChunks, 'news')}`
     // Set up the response stream
     const stream = new ReadableStream({
       async start(controller) {
-        // Send all chunks first
         const encoder = new TextEncoder();
         
-        // Sanitize the chunks before sending
-        const sanitizedChunks = {
-          restaurant: restaurantChunks.map(chunk => ({
-            ...chunk,
-            text: chunk.text.replace(/\n/g, ' ').replace(/"/g, '\\"'),
-            metadata: {
-              ...chunk.metadata,
-              text: chunk.metadata.text ? chunk.metadata.text.replace(/\n/g, ' ').replace(/"/g, '\\"') : '',
-              title: chunk.metadata.title ? chunk.metadata.title.replace(/\n/g, ' ').replace(/"/g, '\\"') : '',
-              description: chunk.metadata.description ? chunk.metadata.description.replace(/\n/g, ' ').replace(/"/g, '\\"') : '',
-            }
-          })),
-          wikipedia: wikipediaChunks.map(chunk => ({
-            ...chunk,
-            text: chunk.text.replace(/\n/g, ' ').replace(/"/g, '\\"'),
-            metadata: {
-              ...chunk.metadata,
-              text: chunk.metadata.text ? chunk.metadata.text.replace(/\n/g, ' ').replace(/"/g, '\\"') : '',
-              title: chunk.metadata.title ? chunk.metadata.title.replace(/\n/g, ' ').replace(/"/g, '\\"') : '',
-              summary: chunk.metadata.summary ? chunk.metadata.summary.replace(/\n/g, ' ').replace(/"/g, '\\"') : '',
-            }
-          })),
-          news: newsChunks.map(chunk => ({
-            ...chunk,
-            text: chunk.text.replace(/\n/g, ' ').replace(/"/g, '\\"'),
-            metadata: {
-              ...chunk.metadata,
-              text: chunk.metadata.text ? chunk.metadata.text.replace(/\n/g, ' ').replace(/"/g, '\\"') : '',
-              title: chunk.metadata.title ? chunk.metadata.title.replace(/\n/g, ' ').replace(/"/g, '\\"') : '',
-            }
-          }))
-        };
-
         try {
+          // Sanitize and prepare chunks
+          const sanitizedChunks = {
+            restaurant: restaurantChunks.map(sanitizeChunk),
+            wikipedia: wikipediaChunks.map(sanitizeChunk),
+            news: newsChunks.map(sanitizeChunk)
+          };
+
           // Send the context data first
           const contextData = JSON.stringify({
             type: 'context',
@@ -450,7 +458,7 @@ ${formatChunks(newsChunks, 'news')}`
             if (content) {
               const contentData = JSON.stringify({
                 type: 'content',
-                content: content.replace(/\n/g, '\\n')
+                content: sanitizeText(content)
               });
               controller.enqueue(encoder.encode(`data: ${contentData}\n\n`));
             }
