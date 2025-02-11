@@ -1,4 +1,4 @@
-# San Francisco Dining Retrieval Augmented Generation (RAG) Chatbot
+# San Francisco Dining RAG Chatbot
 
 This repository demonstrates a Retrieval Augmented Generation (RAG) pipeline that integrates both structured and unstructured data. It answers queries about restaurants, menus, ingredients, and more in San Francisco. The application uses OpenAI’s 'gpt-4o' model for understanding questions and generating context-aware responses, while Pinecone is used for embedding storage vector-based similarity search.
 
