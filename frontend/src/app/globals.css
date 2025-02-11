@@ -1,53 +1,97 @@
+/* Define CSS variables globally outside of any Tailwind layers */
+:root {
+  --background: 0 0% 100%;
+  --foreground: 240 10% 3.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 240 10% 3.9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 240 10% 3.9%;
+  --primary: 142.1 76.2% 36.3%;
+  --primary-foreground: 355.7 100% 97.3%;
+  --secondary: 240 4.8% 95.9%;
+  --secondary-foreground: 240 5.9% 10%;
+  --muted: 240 4.8% 95.9%;
+  --muted-foreground: 240 3.8% 46.1%;
+  --accent: 240 4.8% 95.9%;
+  --accent-foreground: 240 5.9% 10%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 240 5.9% 90%;
+  --input: 240 5.9% 90%;
+  --ring: 142.1 76.2% 36.3%;
+  --radius: 0.75rem;
+
+  /* SF-themed colors - refined palette */
+  --sf-fog: 220 30% 97%;
+  --sf-golden-gate: 5 85% 45%;
+  --sf-bay-blue: 200 75% 40%;
+  --sf-sunset: 35 90% 55%;
+  --sf-forest: 150 35% 35%;
+  --sf-sand: 35 25% 92%;
+  --sf-night: 220 35% 15%;
+  --sf-mist: 220 25% 95%;
+  --sf-chinatown: 0 75% 40%;
+  --sf-mission: 25 80% 50%;
+  --sf-pacific: 195 85% 45%;
+  --sf-alcatraz: 200 15% 45%;
+  --sf-cable-car: 30 70% 50%;
+  --sf-twin-peaks: 140 30% 40%;
+  
+  /* Refined shadows */
+  --shadow-soft: 0 2px 4px rgba(180, 190, 200, 0.1);
+  --shadow-medium: 0 4px 8px rgba(180, 190, 200, 0.15);
+  --shadow-strong: 0 8px 16px rgba(180, 190, 200, 0.2);
+  --shadow-fog: 0 8px 32px rgba(180, 190, 200, 0.25);
+}
+
+.dark {
+  --background: 20 14.3% 4.1%;
+  --foreground: 0 0% 95%;
+  --card: 24 9.8% 10%;
+  --card-foreground: 0 0% 95%;
+  --popover: 0 0% 9%;
+  --popover-foreground: 0 0% 95%;
+  --primary: 142.1 70.6% 45.3%;
+  --primary-foreground: 144.9 80.4% 10%;
+  --secondary: 240 3.7% 15.9%;
+  --secondary-foreground: 0 0% 98%;
+  --muted: 0 0% 15%;
+  --muted-foreground: 240 5% 64.9%;
+  --accent: 12 6.5% 15.1%;
+  --accent-foreground: 0 0% 98%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 0 85.7% 97.3%;
+  --border: 240 3.7% 15.9%;
+  --input: 240 3.7% 15.9%;
+  --ring: 142.4 71.8% 29.2%;
+
+  /* SF-themed dark mode colors - refined */
+  --sf-fog: 220 20% 12%;
+  --sf-golden-gate: 5 70% 35%;
+  --sf-bay-blue: 200 60% 30%;
+  --sf-sunset: 35 75% 45%;
+  --sf-forest: 150 25% 25%;
+  --sf-sand: 35 20% 15%;
+  --sf-night: 220 30% 8%;
+  --sf-mist: 220 15% 15%;
+  --sf-chinatown: 0 65% 30%;
+  --sf-mission: 25 70% 40%;
+  --sf-pacific: 195 65% 35%;
+  --sf-alcatraz: 200 15% 25%;
+  --sf-cable-car: 30 60% 40%;
+  --sf-twin-peaks: 140 25% 30%;
+  
+  /* Dark mode shadows */
+  --shadow-soft: 0 2px 4px rgba(0, 0, 0, 0.2);
+  --shadow-medium: 0 4px 8px rgba(0, 0, 0, 0.25);
+  --shadow-strong: 0 8px 16px rgba(0, 0, 0, 0.3);
+  --shadow-fog: 0 8px 32px rgba(0, 0, 0, 0.35);
+}
+
+/* Tailwind CSS Directives */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-@layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 199 89% 48%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 199 89% 48%;
-    --radius: 0.5rem;
-  }
-
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 199 89% 48%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 199 89% 48%;
-  }
-}
 
 @layer base {
   * {
@@ -55,32 +99,220 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
 
+/* SF-themed components - refined */
 @layer components {
+  .sf-gradient {
+    @apply bg-gradient-to-br from-[hsl(var(--sf-golden-gate))] via-[hsl(var(--sf-sunset))] to-[hsl(var(--sf-bay-blue))]
+           text-white dark:from-[hsl(var(--sf-golden-gate))] dark:via-[hsl(var(--sf-sunset))] dark:to-[hsl(var(--sf-bay-blue))];
+  }
+
+  .sf-card {
+    @apply rounded-xl border bg-card/95 backdrop-blur-md 
+           shadow-[var(--shadow-medium)] hover:shadow-[var(--shadow-fog)] 
+           transition-all duration-500
+           dark:bg-card/90 dark:border-border/20;
+  }
+
+  .sf-glass {
+    @apply bg-background/95 backdrop-blur-md border border-border/30
+           shadow-[var(--shadow-soft)] hover:shadow-[var(--shadow-medium)]
+           transition-all duration-300 dark:bg-background/80
+           dark:border-border/10;
+  }
+
+  .sf-input {
+    @apply rounded-lg border bg-background/95 backdrop-blur-md px-4 py-2
+           focus:outline-none focus:ring-2 focus:ring-[hsl(var(--sf-golden-gate))]
+           dark:bg-background/80 dark:border-border/20
+           placeholder:text-muted-foreground/60
+           transition-all duration-300
+           hover:border-[hsl(var(--sf-golden-gate))]/50;
+  }
+
+  .sf-button {
+    @apply rounded-lg bg-gradient-to-r from-[hsl(var(--sf-golden-gate))] to-[hsl(var(--sf-sunset))] 
+           text-white px-4 py-2
+           hover:opacity-90 hover:scale-[1.02]
+           active:scale-[0.98]
+           disabled:opacity-50 disabled:cursor-not-allowed
+           shadow-[var(--shadow-soft)]
+           transition-all duration-300
+           dark:from-[hsl(var(--sf-golden-gate))]/90 dark:to-[hsl(var(--sf-sunset))]/90;
+  }
+
+  .sf-icon {
+    @apply text-[hsl(var(--sf-golden-gate))] 
+           transition-all duration-300
+           hover:text-[hsl(var(--sf-sunset))]
+           dark:text-[hsl(var(--sf-golden-gate))]/80;
+  }
+
+  .sf-suggestion {
+    @apply px-3 py-1.5 rounded-full text-sm
+           bg-gradient-to-r from-[hsl(var(--sf-mist))]/70 to-[hsl(var(--sf-fog))]/70
+           hover:from-[hsl(var(--sf-golden-gate))]/10 hover:to-[hsl(var(--sf-sunset))]/10
+           dark:from-[hsl(var(--sf-night))]/70 dark:to-[hsl(var(--sf-mist))]/10
+           border border-border/20 dark:border-border/10
+           shadow-[var(--shadow-soft)] hover:shadow-[var(--shadow-medium)]
+           transition-all duration-300 transform
+           hover:scale-[1.02] active:scale-[0.98];
+  }
+
+  .sf-message {
+    @apply rounded-xl border bg-background/95 p-4
+           shadow-[var(--shadow-soft)] hover:shadow-[var(--shadow-medium)]
+           transition-all duration-300
+           dark:bg-background/80 dark:border-border/20
+           hover:border-[hsl(var(--sf-golden-gate))]/20;
+  }
+
+  .sf-message-user {
+    @apply bg-gradient-to-br from-[hsl(var(--sf-golden-gate))]/5 to-[hsl(var(--sf-sunset))]/5
+           dark:from-[hsl(var(--sf-golden-gate))]/10 dark:to-[hsl(var(--sf-sunset))]/10
+           border-[hsl(var(--sf-golden-gate))]/10 dark:border-[hsl(var(--sf-golden-gate))]/20;
+  }
+
   .btn {
-    @apply px-4 py-2 rounded-md font-medium transition-colors duration-200;
+    @apply inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50;
   }
 
   .btn-primary {
-    @apply bg-primary-500 text-white hover:bg-primary-600;
+    @apply bg-primary text-primary-foreground hover:bg-primary;
   }
 
   .btn-secondary {
-    @apply bg-secondary-200 text-secondary-900 hover:bg-secondary-300;
+    @apply bg-secondary text-secondary-foreground hover:bg-secondary;
   }
 
   .card {
-    @apply rounded-lg border border-border bg-card p-4 shadow-sm;
+    @apply rounded-lg border bg-card text-card-foreground shadow-sm;
+  }
+
+  .card-header {
+    @apply flex flex-col space-y-1.5 p-6;
+  }
+
+  .card-title {
+    @apply text-2xl font-semibold leading-none tracking-tight;
+  }
+
+  .card-description {
+    @apply text-sm text-muted-foreground;
+  }
+
+  .card-content {
+    @apply p-6 pt-0;
+  }
+
+  .card-footer {
+    @apply flex items-center p-6 pt-0;
   }
 
   .input {
-    @apply rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background
-           file:border-0 file:bg-transparent file:text-sm file:font-medium
-           placeholder:text-muted-foreground
-           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2
-           disabled:cursor-not-allowed disabled:opacity-50;
+    @apply flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .badge {
+    @apply inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2;
+  }
+}
+
+/* Enhanced typography */
+.sf-heading {
+  @apply font-bold tracking-tight 
+         bg-gradient-to-br from-[hsl(var(--sf-golden-gate))] to-[hsl(var(--sf-sunset))]
+         bg-clip-text text-transparent
+         dark:from-[hsl(var(--sf-golden-gate))]/90 dark:to-[hsl(var(--sf-sunset))]/90;
+}
+
+/* Enhanced animations */
+@keyframes fog-flow {
+  0% {
+    opacity: 0.1;
+    transform: translateX(-10%) translateY(0%);
+  }
+  50% {
+    opacity: 0.3;
+    transform: translateX(0%) translateY(-5%);
+  }
+  100% {
+    opacity: 0.1;
+    transform: translateX(10%) translateY(0%);
+  }
+}
+
+@keyframes bridge-swing {
+  0% {
+    transform: rotate(-1deg);
+  }
+  50% {
+    transform: rotate(1deg);
+  }
+  100% {
+    transform: rotate(-1deg);
+  }
+}
+
+.animate-fog {
+  animation: fog-flow 20s ease-in-out infinite;
+}
+
+.animate-bridge {
+  animation: bridge-swing 6s ease-in-out infinite;
+  transform-origin: top;
+}
+
+/* Enhanced scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-gradient-to-b from-[hsl(var(--sf-fog))]/30 to-[hsl(var(--sf-mist))]/30 rounded-full;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-gradient-to-b from-[hsl(var(--sf-golden-gate))]/20 to-[hsl(var(--sf-sunset))]/20 
+         rounded-full hover:from-[hsl(var(--sf-golden-gate))]/30 hover:to-[hsl(var(--sf-sunset))]/30
+         transition-colors duration-300;
+}
+
+/* Micro-interactions */
+@layer utilities {
+  .sf-hover-lift {
+    @apply transition-all duration-300
+           hover:translate-y-[-2px] hover:shadow-[var(--shadow-medium)];
+  }
+
+  .sf-press {
+    @apply active:scale-95 transition-transform duration-200;
+  }
+
+  /* Shine effect */
+  .sf-shine {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .sf-shine::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      to right,
+      transparent 0%,
+      rgba(255, 255, 255, 0.1) 50%,
+      transparent 100%
+    );
+    transform: translateX(-200%);
+    transition: transform 1s ease-in-out;
+  }
+
+  .sf-shine:hover::after {
+    transform: translateX(200%);
   }
 }

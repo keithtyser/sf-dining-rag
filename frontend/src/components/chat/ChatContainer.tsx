@@ -1,233 +1,110 @@
-import React, { useRef, useState } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
+"use client";
+
+import React, { useRef, useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { Card } from '../ui/Card';
-import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
-import { Send, Copy, Command, Loader2 } from 'lucide-react';
-import { CodeBlock } from '../ui/CodeBlock';
-import { useToast } from '@/hooks/useToast';
-import type { VirtualItem } from '@tanstack/react-virtual';
-
-interface Message {
-  id: string;
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  timestamp: number;
-  status?: 'sending' | 'error';
-  error?: string;
-}
+import { Send, Loader2 } from 'lucide-react';
+import { ChatMessage } from './ChatMessage';
+import { ScrollArea } from '../ui/scroll-area';
+import type { Message } from '@/types/chat';
 
 interface ChatContainerProps {
   className?: string;
   messages: Message[];
-  isTyping?: boolean;
+  isLoading?: boolean;
   onSendMessage: (message: string) => Promise<void>;
-  onRetry?: (messageId: string) => Promise<void>;
+  finalPrompt?: string;
+  hideMessages?: boolean;
 }
 
 export function ChatContainer({
   className,
   messages,
-  isTyping = false,
+  isLoading = false,
   onSendMessage,
-  onRetry,
+  finalPrompt,
+  hideMessages = false,
 }: ChatContainerProps) {
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const lastMessageRef = useRef<HTMLDivElement>(null);
   const [input, setInput] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const parentRef = useRef<HTMLDivElement>(null);
-  const { addToast } = useToast();
+  const prevMessagesLength = useRef(messages.length);
 
-  // Set up virtualization for messages
-  const rowVirtualizer = useVirtualizer({
-    count: messages.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => 100, // Estimate each message height
-    overscan: 5, // Number of items to render outside of the visible area
-  });
+  // Scroll to the top of new message when it arrives
+  useEffect(() => {
+    if (messages.length > prevMessagesLength.current && lastMessageRef.current) {
+      lastMessageRef.current.scrollIntoView({ behavior: 'auto', block: 'start' });
+    }
+    prevMessagesLength.current = messages.length;
+  }, [messages]);
 
-  const handleSend = async () => {
-    if (!input.trim()) return;
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim() || isLoading) return;
 
     try {
-      setIsLoading(true);
       await onSendMessage(input);
       setInput('');
     } catch (error) {
-      addToast({
-        title: 'Failed to send message',
-        description: error instanceof Error ? error.message : 'An error occurred',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
-
-  const copyToClipboard = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      addToast({
-        title: 'Copied to clipboard',
-        description: 'Message content has been copied',
-        variant: 'success',
-      });
-    } catch (error) {
-      addToast({
-        title: 'Failed to copy',
-        description: 'Could not copy message to clipboard',
-        variant: 'destructive',
-      });
+      console.error('Error sending message:', error);
     }
   };
 
   return (
-    <Card className={cn('flex h-full flex-col overflow-hidden', className)}>
-      {/* Messages Container */}
-      <div
-        ref={parentRef}
-        className="flex-1 overflow-auto p-4"
-        style={{
-          height: '100%',
-          width: '100%',
-        }}
-      >
-        <div
-          style={{
-            height: `${rowVirtualizer.getTotalSize()}px`,
-            width: '100%',
-            position: 'relative',
-          }}
-        >
-          {rowVirtualizer.getVirtualItems().map((virtualRow: VirtualItem) => {
-            const message = messages[virtualRow.index];
-            return (
-              <div
-                key={message.id}
-                data-index={virtualRow.index}
-                ref={rowVirtualizer.measureElement}
-                className={cn(
-                  'mb-4 flex',
-                  message.role === 'user' ? 'justify-end' : 'justify-start'
-                )}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  transform: `translateY(${virtualRow.start}px)`,
-                }}
-              >
-                <div
-                  className={cn(
-                    'relative max-w-[80%] rounded-lg px-4 py-2',
-                    message.role === 'user'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted',
-                    message.status === 'error' && 'border-2 border-destructive'
-                  )}
-                >
-                  {/* Message Content */}
-                  {message.content.startsWith('```') ? (
-                    <CodeBlock
-                      code={message.content.replace(/```\w*\n?|\n?```/g, '')}
-                      language="plaintext"
-                      showLineNumbers
-                    />
-                  ) : (
-                    <div className="whitespace-pre-wrap">{message.content}</div>
-                  )}
-
-                  {/* Message Footer */}
-                  <div className="mt-1 flex items-center justify-end gap-2 text-xs opacity-70">
-                    <span>
-                      {new Date(message.timestamp).toLocaleTimeString()}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6"
-                      onClick={() => copyToClipboard(message.content)}
-                    >
-                      <Copy className="h-4 w-4" />
-                    </Button>
-                  </div>
-
-                  {/* Error State */}
-                  {message.status === 'error' && (
-                    <div className="mt-2 text-sm text-destructive">
-                      <p>{message.error}</p>
-                      {onRetry && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => onRetry(message.id)}
-                          className="mt-1"
-                        >
-                          Retry
-                        </Button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Typing Indicator */}
-        {isTyping && (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <span>Assistant is typing...</span>
-          </div>
-        )}
-      </div>
-
-      {/* Input Area */}
-      <div className="border-t p-4">
-        <div className="flex gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="shrink-0"
-            onClick={() => {
-              addToast({
-                title: 'Available Commands',
-                description: 'Type / to see available commands',
-                variant: 'info',
-              });
-            }}
+    <Card className={cn(
+      'flex flex-col overflow-hidden',
+      !hideMessages && 'sf-card',
+      className
+    )}>
+      {/* Messages */}
+      {!hideMessages && (
+        <div className="flex-1 overflow-hidden">
+          <ScrollArea 
+            className="h-full px-4"
+            ref={scrollAreaRef}
           >
-            <Command className="h-5 w-5" />
-          </Button>
-          <Input
+            <div className="flex flex-col gap-4 py-4">
+              {messages.map((message, i) => (
+                <div
+                  key={i}
+                  ref={i === messages.length - 1 ? lastMessageRef : null}
+                >
+                  <ChatMessage
+                    content={message.content}
+                    isUser={message.role === 'user'}
+                    isLoading={isLoading && i === messages.length - 1}
+                  />
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
+        </div>
+      )}
+
+      {/* Input Form */}
+      <div className="flex-shrink-0 sf-glass border-t p-4">
+        <form onSubmit={handleSubmit} className="flex gap-2">
+          <input
+            type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder="Type a message..."
+            placeholder="Ask about San Francisco restaurants, local dishes, or dining recommendations..."
+            className="sf-input flex-1 sf-shine"
             disabled={isLoading}
-            className="min-h-[40px]"
           />
           <Button
-            onClick={handleSend}
-            disabled={isLoading || !input.trim()}
-            className="shrink-0"
+            type="submit"
+            disabled={!input.trim() || isLoading}
+            className="sf-button sf-shine sf-press"
           >
             {isLoading ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              <Send className="h-5 w-5" />
+              <Send className="h-4 w-4" />
             )}
           </Button>
-        </div>
+        </form>
       </div>
     </Card>
   );

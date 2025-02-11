@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { ChatContainer } from './ChatContainer';
+import { ToastProvider } from '../ui/ToastProvider';
 
 const meta = {
   title: 'Chat/ChatContainer',
@@ -7,45 +8,79 @@ const meta = {
   parameters: {
     layout: 'padded',
   },
+  decorators: [
+    (Story) => (
+      <div className="h-[600px]">
+        <ToastProvider>
+          <Story />
+        </ToastProvider>
+      </div>
+    ),
+  ],
   tags: ['autodocs'],
 } satisfies Meta<typeof ChatContainer>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-const sampleMessages = [
+const messages = [
   {
     id: '1',
     role: 'user' as const,
-    content: 'What are the most popular dishes at La Piazza?',
+    content: 'Hello! Can you help me find a good Italian restaurant?',
     timestamp: Date.now() - 5000,
   },
   {
     id: '2',
     role: 'assistant' as const,
-    content: 'Based on the available data, the most popular dishes at La Piazza are:\n\n1. Margherita Pizza - A classic Italian pizza with fresh tomatoes, mozzarella, and basil\n2. Fettuccine Alfredo - Creamy pasta dish with parmesan cheese\n3. Tiramisu - Traditional Italian dessert',
+    content: 'I found several highly-rated Italian restaurants in your area. Would you like me to list them with their specialties?',
     timestamp: Date.now() - 3000,
   },
   {
     id: '3',
     role: 'user' as const,
-    content: 'Can you show me the ingredients for the Margherita Pizza?',
+    content: 'Yes, please! I particularly enjoy authentic pasta dishes.',
     timestamp: Date.now() - 2000,
   },
   {
     id: '4',
     role: 'assistant' as const,
-    content: '```\nMargherita Pizza Ingredients:\n- San Marzano tomatoes\n- Fresh mozzarella cheese\n- Fresh basil leaves\n- Extra virgin olive oil\n- Salt\n- Pizza dough (made daily)\n```',
+    content: `Here are some top Italian restaurants known for their pasta:
+
+1. La Piazza
+   - Signature dish: Handmade Fettuccine Alfredo
+   - Known for: Traditional Roman pasta dishes
+   - Price range: $$
+
+2. Pasta Perfection
+   - Signature dish: Wild Mushroom Ravioli
+   - Known for: Fresh, daily-made pasta
+   - Price range: $$$
+
+3. Trattoria Bella
+   - Signature dish: Seafood Linguine
+   - Known for: Coastal Italian cuisine
+   - Price range: $$
+
+Would you like more details about any of these restaurants?`,
     timestamp: Date.now() - 1000,
   },
 ];
 
 export const Default: Story = {
   args: {
-    messages: sampleMessages,
+    messages,
     onSendMessage: async (message) => {
       console.log('Sending message:', message);
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    },
+    onRetry: async (messageId) => {
+      console.log('Retrying message:', messageId);
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    },
+    onMessageFeedback: async (messageId, isPositive) => {
+      console.log('Message feedback:', { messageId, isPositive });
+      await new Promise((resolve) => setTimeout(resolve, 500));
     },
   },
 };
@@ -55,7 +90,7 @@ export const Empty: Story = {
     messages: [],
     onSendMessage: async (message) => {
       console.log('Sending message:', message);
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
     },
   },
 };
@@ -70,22 +105,23 @@ export const Loading: Story = {
 export const WithError: Story = {
   args: {
     messages: [
-      ...sampleMessages,
+      ...messages,
       {
         id: '5',
         role: 'user' as const,
-        content: 'What are the opening hours?',
+        content: 'This message failed to send',
         timestamp: Date.now(),
         status: 'error' as const,
-        error: 'Failed to send message. Please check your connection and try again.',
+        error: 'Network error occurred',
       },
     ],
-    onSendMessage: async () => {
-      throw new Error('Network error');
+    onSendMessage: async (message) => {
+      console.log('Sending message:', message);
+      await new Promise((resolve) => setTimeout(resolve, 1000));
     },
     onRetry: async (messageId) => {
       console.log('Retrying message:', messageId);
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
     },
   },
 };

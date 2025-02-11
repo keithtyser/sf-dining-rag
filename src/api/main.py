@@ -2,8 +2,9 @@ import uuid
 import math
 import time
 import json
+import asyncio
 from typing import Dict, List, Optional, Any
-from fastapi import FastAPI, HTTPException, Query, Depends, Request, Body, Response
+from fastapi import FastAPI, HTTPException, Query, Depends, Request, Body, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -203,6 +204,100 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
 # Store conversation histories
 conversation_manager = ConversationManager()
 
+# WebSocket connection manager
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
+
+    async def broadcast(self, message: dict):
+        for connection in self.active_connections[:]:  # Create a copy of the list
+            try:
+                await connection.send_json(message)
+            except:
+                # Remove failed connections
+                self.disconnect(connection)
+
+    async def send_pipeline_update(self, stage: str, status: str, progress: float = 0, data: dict = None):
+        message = {
+            "type": f"{stage}_{status}",
+            "data": {
+                "progress": progress,
+                **(data or {})
+            },
+            "timestamp": time.time()
+        }
+        await self.broadcast(message)
+
+manager = ConnectionManager()
+
+async def process_query_with_rag(query: str, websocket: WebSocket = None):
+    """Process a query using the RAG pipeline with real-time updates"""
+    try:
+        # Retrieval stage
+        await manager.send_pipeline_update("retrieval", "start")
+        chunks = await get_similar_chunks(query)
+        await manager.send_pipeline_update("retrieval", "progress", 50)
+        
+        # Sort and process chunks
+        chunks.sort(key=lambda x: x.get("score", 0), reverse=True)
+        formatted_chunks = [
+            {
+                "content": chunk.get("text", ""),
+                "tokens": len(chunk.get("text", "").split()),  # Simple token count
+                "title": chunk.get("metadata", {}).get("title", "Menu Item"),
+                "source": chunk.get("metadata", {}).get("source", "menu"),
+                "position": idx + 1,
+                "similarity": chunk.get("score", 0)
+            }
+            for idx, chunk in enumerate(chunks[:5])  # Send top 5 chunks
+        ]
+        
+        await manager.send_pipeline_update("retrieval", "complete", 100, {
+            "chunks": formatted_chunks
+        })
+
+        return chunks
+
+    except Exception as e:
+        await manager.send_pipeline_update("error", "error", data={"message": str(e)})
+        raise
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await manager.connect(websocket)
+    try:
+        while True:
+            data = await websocket.receive_json()
+            if data.get("type") == "query":
+                await process_query_with_rag(data.get("query", ""), websocket)
+            else:
+                await websocket.send_json({
+                    "type": "error",
+                    "data": {"message": "Unsupported message type"},
+                    "timestamp": time.time()
+                })
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+    except Exception as e:
+        logger.error(f"WebSocket error: {str(e)}")
+        try:
+            await websocket.send_json({
+                "type": "error",
+                "data": {"message": str(e)},
+                "timestamp": time.time()
+            })
+        except:
+            pass
+        manager.disconnect(websocket)
+
 @app.get(
     f"{API_PREFIX}/health",
     tags=["health"],
@@ -286,12 +381,25 @@ async def chat_endpoint(
 ):
     """Process a chat message and return a response"""
     try:
+        # Process query through RAG pipeline
+        chunks = await get_similar_chunks(chat_request.query)
+        chunks.sort(key=lambda x: x.get("score", 0), reverse=True)
+        
+        # Format chunks for frontend
+        formatted_chunks = [
+            {
+                "content": chunk.get("text", ""),
+                "tokens": len(chunk.get("text", "").split()),
+                "title": chunk.get("metadata", {}).get("title", "Menu Item"),
+                "source": chunk.get("metadata", {}).get("source", "menu"),
+                "position": idx + 1,
+                "similarity": chunk.get("score", 0)
+            }
+            for idx, chunk in enumerate(chunks[:5])  # Send top 5 chunks
+        ]
+        
         # Get conversation history
         history = await get_conversation_history(chat_request.conversation_id)
-        
-        # Get relevant chunks
-        chunks = await get_similar_chunks(chat_request.query)
-        context = "\n".join([chunk.get("text", "") for chunk in chunks])
         
         # Generate response
         conversation_id = chat_request.conversation_id or str(uuid.uuid4())
@@ -305,14 +413,17 @@ async def chat_endpoint(
         # Save conversation
         await save_conversation(conversation_id, chat_request.query, response)
         
-        return ChatResponse(
-            response=response,
-            conversation_id=conversation_id
-        )
+        return JSONResponse(content={
+            "response": response,
+            "conversation_id": conversation_id,
+            "context_chunks": formatted_chunks
+        })
 
     except HTTPException as e:
+        await manager.send_pipeline_update("error", "error", data={"message": str(e)})
         raise e
     except Exception as e:
+        await manager.send_pipeline_update("error", "error", data={"message": str(e)})
         logger.error(f"Error processing chat: {str(e)}")
         raise HTTPException(
             status_code=500,

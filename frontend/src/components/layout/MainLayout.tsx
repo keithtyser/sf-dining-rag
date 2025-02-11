@@ -1,107 +1,95 @@
-import React from 'react';
-import { useAtom } from 'jotai';
+"use client";
+
+import { Button } from '@/components/ui/Button';
+import { Settings, Menu, Sun, Moon, Compass } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useTheme } from 'next-themes';
 import { cn } from '@/lib/utils';
-import { uiStateAtom } from '@/lib/atoms';
-import { ConnectionStatus } from '../ui/ConnectionStatus';
-import { StateDebugger } from '../debug/StateDebugger';
 
 interface MainLayoutProps {
   children: React.ReactNode;
-  className?: string;
 }
 
-export function MainLayout({ children, className }: MainLayoutProps) {
-  const [uiState] = useAtom(uiStateAtom);
+export function MainLayout({ children }: MainLayoutProps) {
+  const [showSidebar, setShowSidebar] = useState(false);
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  // After mounting, we have access to the theme
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="relative flex h-screen flex-col overflow-hidden">
+      {/* Dynamic SF-themed background */}
+      <div className="fixed inset-0 -z-10">
+        <div className="absolute inset-0 bg-[hsl(var(--sf-fog))] opacity-20 animate-fog" />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-background to-background" />
+      </div>
+
       {/* Header */}
-      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-14 items-center">
-          <div className="mr-4 flex">
-            <a className="mr-6 flex items-center space-x-2" href="/">
-              <span className="font-bold">RAG Pipeline</span>
-            </a>
+      <header className="sf-glass sticky top-0 z-50 border-b px-4 py-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Compass className="h-6 w-6 sf-icon animate-bridge" />
+            <h1 className="sf-heading text-lg">SF Dining Guide</h1>
           </div>
-          <div className="flex flex-1 items-center justify-between space-x-2 md:justify-end">
-            <nav className="flex items-center space-x-6">
-              <ConnectionStatus />
-            </nav>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              className="hover:bg-[hsl(var(--sf-golden-gate))]/10"
+            >
+              {mounted && (
+                theme === 'dark' ? (
+                  <Sun className="h-5 w-5" />
+                ) : (
+                  <Moon className="h-5 w-5" />
+                )
+              )}
+            </Button>
           </div>
         </div>
       </header>
 
-      {/* Main Content */}
-      <div className="container flex-1 items-start md:grid md:grid-cols-[220px_minmax(0,1fr)] md:gap-6 lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-10">
-        {/* Sidebar */}
-        <aside className={cn(
-          "fixed top-14 z-30 -ml-2 hidden h-[calc(100vh-3.5rem)] w-full shrink-0 overflow-y-auto border-r md:sticky md:block",
-          uiState.sidebarOpen ? "block" : "hidden md:block"
-        )}>
-          <div className="relative overflow-hidden py-6 pr-6 lg:py-8">
-            <div className="space-y-4">
-              <div className="px-3">
-                <h2 className="mb-2 px-4 text-lg font-semibold tracking-tight">
-                  Pipeline
-                </h2>
-                <div className="space-y-1">
-                  <a
-                    href="#data-ingestion"
-                    className="flex items-center rounded-lg px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
-                  >
-                    Data Ingestion
-                  </a>
-                  <a
-                    href="#embedding"
-                    className="flex items-center rounded-lg px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
-                  >
-                    Embedding
-                  </a>
-                  <a
-                    href="#indexing"
-                    className="flex items-center rounded-lg px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
-                  >
-                    Indexing
-                  </a>
-                </div>
-              </div>
-              <div className="px-3">
-                <h2 className="mb-2 px-4 text-lg font-semibold tracking-tight">
-                  Visualization
-                </h2>
-                <div className="space-y-1">
-                  <a
-                    href="#vector-space"
-                    className="flex items-center rounded-lg px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
-                  >
-                    Vector Space
-                  </a>
-                  <a
-                    href="#metrics"
-                    className="flex items-center rounded-lg px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
-                  >
-                    Metrics
-                  </a>
-                </div>
-              </div>
-            </div>
+      {/* Sidebar */}
+      <div className={cn(
+        "fixed inset-y-0 left-0 z-40 w-64 transform sf-glass border-r transition-transform duration-300 ease-out",
+        showSidebar ? "translate-x-0" : "-translate-x-full"
+      )}>
+        <div className="flex h-full flex-col p-4">
+          <div className="flex items-center justify-between border-b pb-4">
+            <h2 className="sf-heading">Explore SF</h2>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowSidebar(false)}
+              className="hover:bg-[hsl(var(--sf-golden-gate))]/10"
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
           </div>
-        </aside>
-
-        {/* Main Content Area */}
-        <main className={cn(
-          "flex w-full flex-col overflow-hidden",
-          className
-        )}>
-          {children}
-        </main>
+          {/* Add sidebar content here */}
+        </div>
       </div>
 
-      {/* Debug Panel */}
-      {uiState.debug && (
-        <div className="fixed bottom-4 right-4 z-50 w-96">
-          <StateDebugger />
+      {/* Main Content */}
+      <main className="flex-1 overflow-hidden">
+        <div className="h-full p-4">
+          <div className="h-full rounded-lg">
+            {children}
+          </div>
         </div>
+      </main>
+
+      {/* Backdrop */}
+      {showSidebar && (
+        <div
+          className="fixed inset-0 z-30 bg-background/80 backdrop-blur-sm transition-opacity duration-300"
+          onClick={() => setShowSidebar(false)}
+        />
       )}
     </div>
   );

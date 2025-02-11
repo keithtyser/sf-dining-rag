@@ -1,13 +1,14 @@
-import { WebSocketProvider } from '@/providers/WebSocketProvider';
-import { cn } from '@/lib/utils';
+import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
+import { ThemeProvider } from '@/providers/ThemeProvider';
+import { Toaster } from 'sonner';
 
 const inter = Inter({ subsets: ['latin'] });
 
-export const metadata = {
-  title: 'RAG Pipeline Visualizer',
-  description: 'Real-time visualization of the RAG pipeline',
+export const metadata: Metadata = {
+  title: 'SF Dining Guide',
+  description: 'Your expert guide to San Francisco restaurants and dining experiences',
 };
 
 export default function RootLayout({
@@ -16,11 +17,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className={cn(inter.className, 'min-h-screen bg-background')}>
-        <WebSocketProvider>
+    <html lang="en" suppressHydrationWarning>
+      <body className={inter.className}>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
           {children}
-        </WebSocketProvider>
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   );

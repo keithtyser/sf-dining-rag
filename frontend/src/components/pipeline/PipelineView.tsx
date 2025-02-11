@@ -1,17 +1,56 @@
+"use client";
+
 import React from 'react';
 import { useAtom } from 'jotai';
 import { cn } from '@/lib/utils';
 import { pipelineStatusAtom } from '@/lib/atoms';
-import { DataSourceVisualizer } from './DataSourceVisualizer';
-import { TextChunkVisualizer } from './TextChunkVisualizer';
-import { EmbeddingVisualizer } from './EmbeddingVisualizer';
-import { IndexingVisualizer } from './IndexingVisualizer';
-import { Card, CardHeader, CardTitle, CardContent } from '../ui/Card';
+import { Card } from '../ui/Card';
 import { Progress } from '../ui/Progress';
+import { Badge } from '@/components/ui/Badge';
+import { Database, FileText, Network, Server } from 'lucide-react';
 
 interface PipelineViewProps {
   className?: string;
 }
+
+interface PipelineStage {
+  id: string;
+  name: string;
+  icon: React.ElementType;
+  description: string;
+  progress: number;
+}
+
+const stages: PipelineStage[] = [
+  { 
+    id: 'ingestion', 
+    name: 'Data Ingestion', 
+    icon: Database,
+    description: 'Loading and preprocessing data from various sources',
+    progress: 0
+  },
+  { 
+    id: 'chunking', 
+    name: 'Text Chunking', 
+    icon: FileText,
+    description: 'Splitting text into optimal chunks for processing',
+    progress: 0
+  },
+  { 
+    id: 'embedding', 
+    name: 'Embedding Generation', 
+    icon: Network,
+    description: 'Converting text chunks into vector embeddings',
+    progress: 0
+  },
+  { 
+    id: 'indexing', 
+    name: 'Vector Indexing', 
+    icon: Server,
+    description: 'Storing and indexing vectors for efficient retrieval',
+    progress: 0
+  },
+];
 
 export function PipelineView({ className }: PipelineViewProps) {
   const [pipelineStatus] = useAtom(pipelineStatusAtom);
@@ -30,113 +69,39 @@ export function PipelineView({ className }: PipelineViewProps) {
   };
 
   return (
-    <div className={cn('space-y-6', className)}>
-      {/* Overall Progress */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Pipeline Progress</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Overall Progress</span>
-              <span className="font-medium">{pipelineStatus.progress}%</span>
+    <div className={cn('space-y-4', className)}>
+      {stages.map((stage) => (
+        <Card key={stage.id} className="relative overflow-hidden">
+          <div className="p-4">
+            <div className="flex items-start gap-4">
+              <div className="rounded-lg bg-primary/10 p-2">
+                <stage.icon className="h-5 w-5 text-primary" />
+              </div>
+              <div className="flex-1 space-y-1">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-medium">{stage.name}</h3>
+                  <Badge variant={stage.progress === 100 ? 'success' : 'secondary'}>
+                    {stage.progress}%
+                  </Badge>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {stage.description}
+                </p>
+                <Progress 
+                  value={stage.progress} 
+                  className={cn(
+                    "h-2 mt-2",
+                    stage.progress === 100 && "bg-green-500/20"
+                  )}
+                />
+              </div>
             </div>
-            <Progress value={pipelineStatus.progress} />
-            {pipelineStatus.error && (
-              <p className="mt-2 text-sm text-destructive">{pipelineStatus.error}</p>
-            )}
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Data Source Stage */}
-      <Card
-        className={cn(
-          'transition-colors',
-          isStageActive('loading') && 'border-primary',
-          isStageComplete('loading') && 'border-green-500'
-        )}
-      >
-        <CardHeader>
-          <CardTitle>Data Ingestion</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <DataSourceVisualizer
-            stages={[
-              {
-                stage: 'loading',
-                progress: isStageActive('loading') ? pipelineStatus.progress : isStageComplete('loading') ? 100 : 0,
-                status: isStageActive('loading') ? 'processing' : isStageComplete('loading') ? 'complete' : 'pending',
-              },
-              {
-                stage: 'scraping',
-                progress: isStageActive('scraping') ? pipelineStatus.progress : isStageComplete('scraping') ? 100 : 0,
-                status: isStageActive('scraping') ? 'processing' : isStageComplete('scraping') ? 'complete' : 'pending',
-              },
-              {
-                stage: 'preprocessing',
-                progress: isStageActive('preprocessing') ? pipelineStatus.progress : isStageComplete('preprocessing') ? 100 : 0,
-                status: isStageActive('preprocessing') ? 'processing' : isStageComplete('preprocessing') ? 'complete' : 'pending',
-              },
-            ]}
-          />
-        </CardContent>
-      </Card>
-
-      {/* Text Chunking Stage */}
-      <Card
-        className={cn(
-          'transition-colors',
-          isStageActive('chunking') && 'border-primary',
-          isStageComplete('chunking') && 'border-green-500'
-        )}
-      >
-        <CardHeader>
-          <CardTitle>Text Chunking</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <TextChunkVisualizer
-            chunks={[]} // TODO: Get chunks from state
-          />
-        </CardContent>
-      </Card>
-
-      {/* Embedding Stage */}
-      <Card
-        className={cn(
-          'transition-colors',
-          isStageActive('embedding') && 'border-primary',
-          isStageComplete('embedding') && 'border-green-500'
-        )}
-      >
-        <CardHeader>
-          <CardTitle>Embedding Generation</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <EmbeddingVisualizer
-            batches={[]} // TODO: Get batches from state
-          />
-        </CardContent>
-      </Card>
-
-      {/* Indexing Stage */}
-      <Card
-        className={cn(
-          'transition-colors',
-          isStageActive('embedding') && 'border-primary',
-          isStageComplete('embedding') && 'border-green-500'
-        )}
-      >
-        <CardHeader>
-          <CardTitle>Vector Indexing</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <IndexingVisualizer
-            operations={[]} // TODO: Get operations from state
-          />
-        </CardContent>
-      </Card>
+          {stage.progress > 0 && stage.progress < 100 && (
+            <div className="absolute inset-0 bg-primary/5 animate-pulse" />
+          )}
+        </Card>
+      ))}
     </div>
   );
 } 

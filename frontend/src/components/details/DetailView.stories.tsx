@@ -1,14 +1,24 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { Provider, createStore } from 'jotai';
 import { DetailView } from './DetailView';
-import { pipelineStatusAtom, systemStatusAtom } from '@/lib/atoms';
+import { metricsDataAtom, systemStatusAtom, pipelineStatusAtom, uiStateAtom } from '@/lib/atoms';
+import { WebSocketProvider } from '@/providers/WebSocketProvider';
 
+// Create stores with different states
 const defaultStore = createStore();
-defaultStore.set(pipelineStatusAtom, {
-  stage: 'loading',
-  progress: 45,
-});
+defaultStore.set(metricsDataAtom, Array.from({ length: 24 }, (_, i) => ({
+  timestamp: Date.now() - i * 3600000,
+  processingTime: Math.random() * 100 + 50,
+  memoryUsage: Math.random() * 80 + 20,
+  cpuUsage: Math.random() * 60 + 20,
+  apiLatency: Math.random() * 200 + 50,
+  queueSize: Math.floor(Math.random() * 10),
+  errorRate: Math.random() * 0.01,
+  throughput: Math.random() * 1000 + 500,
+})));
+
 defaultStore.set(systemStatusAtom, {
+  healthy: true,
   services: [
     {
       name: 'API Server',
@@ -53,13 +63,32 @@ defaultStore.set(systemStatusAtom, {
   lastUpdate: Date.now(),
 });
 
-const errorStore = createStore();
-errorStore.set(pipelineStatusAtom, {
-  stage: 'embedding',
-  progress: 67,
-  error: 'API rate limit exceeded. Retrying in 30 seconds...',
+defaultStore.set(pipelineStatusAtom, {
+  stage: 'loading',
+  progress: 45,
 });
+
+defaultStore.set(uiStateAtom, {
+  sidebarOpen: true,
+  theme: 'system',
+  debug: false,
+});
+
+// Create a store with error states
+const errorStore = createStore();
+errorStore.set(metricsDataAtom, Array.from({ length: 24 }, (_, i) => ({
+  timestamp: Date.now() - i * 3600000,
+  processingTime: Math.random() * 200 + 100,
+  memoryUsage: Math.random() * 90 + 80,
+  cpuUsage: Math.random() * 90 + 80,
+  apiLatency: Math.random() * 500 + 200,
+  queueSize: Math.floor(Math.random() * 50 + 20),
+  errorRate: Math.random() * 0.1 + 0.05,
+  throughput: Math.random() * 500 + 100,
+})));
+
 errorStore.set(systemStatusAtom, {
+  healthy: false,
   services: [
     {
       name: 'API Server',
@@ -106,6 +135,18 @@ errorStore.set(systemStatusAtom, {
   lastUpdate: Date.now(),
 });
 
+errorStore.set(pipelineStatusAtom, {
+  stage: 'embedding',
+  progress: 67,
+  error: 'API rate limit exceeded. Retrying in 30 seconds...',
+});
+
+errorStore.set(uiStateAtom, {
+  sidebarOpen: true,
+  theme: 'system',
+  debug: true,
+});
+
 const meta = {
   title: 'Details/DetailView',
   component: DetailView,
@@ -115,7 +156,9 @@ const meta = {
   decorators: [
     (Story) => (
       <Provider store={defaultStore}>
-        <Story />
+        <WebSocketProvider>
+          <Story />
+        </WebSocketProvider>
       </Provider>
     ),
   ],
@@ -133,7 +176,9 @@ export const WithErrors: Story = {
   decorators: [
     (Story) => (
       <Provider store={errorStore}>
-        <Story />
+        <WebSocketProvider>
+          <Story />
+        </WebSocketProvider>
       </Provider>
     ),
   ],

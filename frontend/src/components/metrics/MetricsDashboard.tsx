@@ -1,7 +1,13 @@
-import React from 'react';
+"use client";
+
+import React, { useEffect, useState } from 'react';
+import { useAtom } from 'jotai';
 import { cn } from '@/lib/utils';
-import { Card } from '../ui/Card';
+import { Card, CardHeader, CardTitle, CardContent } from '../ui/Card';
 import { Progress } from '../ui/Progress';
+import { Badge } from '../ui/Badge';
+import { systemStatusAtom, metricsDataAtom } from '@/lib/atoms';
+import { SystemStatus } from '@/types/system';
 import {
   LineChart,
   Line,
@@ -35,37 +41,41 @@ interface MetricsData {
   throughput: number;
 }
 
-interface SystemStatus {
-  healthy: boolean;
-  message?: string;
-  lastUpdate: number;
-  services: {
-    api: boolean;
-    database: boolean;
-    vectorStore: boolean;
-    embedding: boolean;
-  };
-}
-
 interface MetricsDashboardProps {
   className?: string;
-  data: MetricsData[];
-  systemStatus: SystemStatus;
   timeRange?: '1h' | '24h' | '7d' | '30d';
 }
 
-type MetricsAverages = {
-  [K in keyof Omit<MetricsData, 'timestamp'>]: number;
+const defaultSystemStatus: SystemStatus = {
+  healthy: true,
+  services: [],
+  rateLimits: [],
+  databaseConnections: {
+    active: 0,
+    idle: 0,
+    max: 0
+  },
+  errorRates: {
+    total: 0,
+    byType: {}
+  },
+  lastUpdate: 0
 };
 
-export function MetricsDashboard({
-  className,
-  data,
-  systemStatus,
-  timeRange = '1h',
-}: MetricsDashboardProps) {
+export function MetricsDashboard({ className, timeRange = '1h' }: MetricsDashboardProps) {
+  const [systemStatus] = useAtom(systemStatusAtom);
+  const [metricsData] = useAtom(metricsDataAtom);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const status = systemStatus || defaultSystemStatus;
+
   // Calculate current metrics from the latest data point
-  const currentMetrics = data[data.length - 1] || {
+  const currentMetrics = metricsData[metricsData.length - 1] || {
+    timestamp: 0,
     processingTime: 0,
     memoryUsage: 0,
     cpuUsage: 0,
@@ -76,7 +86,7 @@ export function MetricsDashboard({
   };
 
   // Calculate averages over the time range
-  const averages = data.reduce<MetricsAverages>(
+  const averages = metricsData.reduce<MetricsData>(
     (acc, curr) => ({
       processingTime: acc.processingTime + curr.processingTime,
       memoryUsage: acc.memoryUsage + curr.memoryUsage,
@@ -98,61 +108,103 @@ export function MetricsDashboard({
   );
 
   Object.keys(averages).forEach(key => {
-    averages[key as keyof MetricsAverages] /= data.length || 1;
+    averages[key as keyof MetricsData] /= metricsData.length || 1;
   });
 
+  // Only render time-sensitive content after mounting
+  const renderLastUpdated = () => {
+    if (!mounted) return null;
+    return new Date(status.lastUpdate).toLocaleTimeString();
+  };
+
   return (
-    <div className={cn('space-y-6', className)}>
-      {/* System Status */}
-      <Card className="p-4">
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-medium">System Status</h3>
-          <div
-            className={cn(
-              'flex items-center gap-2 rounded-full px-3 py-1 text-sm',
-              systemStatus.healthy
-                ? 'bg-green-500/10 text-green-500'
-                : 'bg-destructive/10 text-destructive'
-            )}
-          >
-            <Activity className="h-4 w-4" />
-            <span>{systemStatus.healthy ? 'Healthy' : 'Issues Detected'}</span>
-          </div>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {Object.entries(systemStatus.services).map(([service, status]) => (
-            <div
-              key={service}
-              className={cn(
-                'flex items-center gap-2 rounded-lg border p-3',
-                status ? 'border-green-500/20' : 'border-destructive/20'
-              )}
+    <div className={cn('space-y-4', className)}>
+      {/* System Health */}
+      <Card>
+        <CardHeader>
+          <CardTitle>System Health</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between">
+            <Badge 
+              variant={status.healthy ? 'success' : 'destructive'}
+              className="px-4 py-1"
             >
-              {service === 'api' ? (
-                <Network className="h-4 w-4" />
-              ) : service === 'database' ? (
-                <Database className="h-4 w-4" />
-              ) : service === 'vectorStore' ? (
-                <HardDrive className="h-4 w-4" />
-              ) : (
-                <Cpu className="h-4 w-4" />
-              )}
-              <div>
-                <div className="text-sm font-medium">
-                  {service.charAt(0).toUpperCase() + service.slice(1)}
-                </div>
-                <div
-                  className={cn(
-                    'text-xs',
-                    status ? 'text-green-500' : 'text-destructive'
-                  )}
+              {status.healthy ? 'Healthy' : 'Unhealthy'}
+            </Badge>
+            <span className="text-sm text-muted-foreground">
+              Last updated: {renderLastUpdated()}
+            </span>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Services Status */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Services</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            {status.services.map((service) => (
+              <div key={service.name} className="flex items-center justify-between">
+                <span className="font-medium">{service.name}</span>
+                <Badge 
+                  variant={
+                    service.status === 'healthy' ? 'success' : 
+                    service.status === 'degraded' ? 'warning' : 
+                    'destructive'
+                  }
                 >
-                  {status ? 'Operational' : 'Down'}
-                </div>
+                  {service.status}
+                </Badge>
               </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Database Connections */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Database Connections</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <span>Active: {status.databaseConnections.active}</span>
+              <span>Idle: {status.databaseConnections.idle}</span>
+              <span>Max: {status.databaseConnections.max}</span>
             </div>
-          ))}
-        </div>
+            <Progress 
+              value={(status.databaseConnections.active / status.databaseConnections.max) * 100} 
+              className="h-2"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Error Rates */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Error Rates</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="text-sm font-medium">Total Errors</span>
+              <Badge variant={status.errorRates.total > 0 ? 'destructive' : 'success'}>
+                {status.errorRates.total}
+              </Badge>
+            </div>
+            {Object.entries(status.errorRates.byType).map(([type, count]) => (
+              <div key={type} className="flex justify-between items-center text-sm">
+                <span>{type}</span>
+                <span>{count}</span>
+              </div>
+            ))}
+          </div>
+        </CardContent>
       </Card>
 
       {/* Current Metrics */}
@@ -288,7 +340,7 @@ export function MetricsDashboard({
           <h3 className="mb-4 text-sm font-medium">Processing Time Trend</h3>
           <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={data}>
+              <LineChart data={metricsData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis
                   dataKey="timestamp"
@@ -315,7 +367,7 @@ export function MetricsDashboard({
           <h3 className="mb-4 text-sm font-medium">Resource Usage</h3>
           <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={data}>
+              <AreaChart data={metricsData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis
                   dataKey="timestamp"
@@ -356,7 +408,7 @@ export function MetricsDashboard({
           <h3 className="mb-4 text-sm font-medium">API Performance</h3>
           <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={data}>
+              <LineChart data={metricsData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis
                   dataKey="timestamp"
@@ -396,7 +448,7 @@ export function MetricsDashboard({
           <h3 className="mb-4 text-sm font-medium">Error Monitoring</h3>
           <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={data}>
+              <AreaChart data={metricsData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis
                   dataKey="timestamp"

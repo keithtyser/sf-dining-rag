@@ -1,3 +1,5 @@
+"use client";
+
 import React from 'react';
 import { useAtom } from 'jotai';
 import { cn } from '@/lib/utils';
@@ -8,13 +10,21 @@ import { PipelineView } from '../pipeline/PipelineView';
 import { MetricsDashboard } from '../metrics/MetricsDashboard';
 import { SystemStatus } from '../metrics/SystemStatus';
 import { StateDebugger } from '../debug/StateDebugger';
-import { Download, Filter, Search } from 'lucide-react';
+import { Download, Filter } from 'lucide-react';
+import { useWebSocketMulti } from '@/hooks/useWebSocket';
+import { metricsDataAtom, systemStatusAtom } from '@/lib/atoms';
 
 interface DetailViewProps {
   className?: string;
 }
 
 export function DetailView({ className }: DetailViewProps) {
+  const [metricsData] = useAtom(metricsDataAtom);
+  const [systemStatus] = useAtom(systemStatusAtom);
+
+  // Subscribe to WebSocket events
+  useWebSocketMulti(['metrics:update', 'system:status']);
+
   return (
     <div className={cn('space-y-6', className)}>
       {/* Header with Controls */}
@@ -81,7 +91,11 @@ export function DetailView({ className }: DetailViewProps) {
             <CardTitle>Performance Metrics</CardTitle>
           </CardHeader>
           <CardContent>
-            <MetricsDashboard />
+            <MetricsDashboard 
+              data={metricsData || []}
+              systemStatus={systemStatus}
+              timeRange="1h"
+            />
           </CardContent>
         </Card>
 

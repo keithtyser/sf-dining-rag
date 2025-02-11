@@ -1,3 +1,5 @@
+"use client";
+
 import React from 'react';
 import { cn } from '@/lib/utils';
 import { Card } from '../ui/Card';
@@ -124,7 +126,7 @@ export function SystemStatus({ className }: { className?: string }) {
   const { data, connectionState } = useWebSocketMulti<SystemStatusData>(events);
 
   // Use real-time data or fallback to initial states
-  const services = data['system:status'] || [];
+  const services = Array.isArray(data['system:status']) ? data['system:status'] : [];
   const errorRates = data['error:rate'] || {
     last1m: 0,
     last5m: 0,
@@ -140,11 +142,13 @@ export function SystemStatus({ className }: { className?: string }) {
   const rateLimits = data['rate:limits'] || [];
 
   // Calculate overall system status
-  const overallStatus = services.every(s => s.status === 'operational')
-    ? 'operational'
-    : services.some(s => s.status === 'down')
-    ? 'down'
-    : 'degraded';
+  const overallStatus = services && services.length > 0 
+    ? (services.every(s => s.status === 'operational')
+      ? 'operational'
+      : services.some(s => s.status === 'down')
+        ? 'down'
+        : 'degraded')
+    : 'operational';
 
   // Calculate error rate trend
   const errorTrend =
