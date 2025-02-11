@@ -217,6 +217,7 @@ Below is the general procedure:
    - OpenAI API rate limits apply to embeddings and completions
    - Pinecone has query per second (QPS) limitations based on the service tier
 6. **Context Window**: Limited by the model's maximum context window size for processing historical conversation context.
+7. **Limited Mobile Experience**: While the website is accessible on mobile devices, the interface and features are optimized for desktop use, potentially impacting user experience on smaller screens.
 
 ---
 
