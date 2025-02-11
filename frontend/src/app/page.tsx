@@ -100,12 +100,10 @@ export default function Home() {
       // Prepare the prompt with context and conversation history
       const prompt = {
         messages: [
-          // Include previous messages from the conversation
           ...messages.map(msg => ({
             role: msg.role,
             content: msg.content
           })),
-          // Add the new user message
           {
             role: 'user',
             content: message
@@ -119,27 +117,12 @@ export default function Home() {
         frequencyPenalty: 0,
       };
 
-      // Store the formatted prompt for display
       setFinalPrompt(JSON.stringify(prompt, null, 2));
 
-      const response = await fetch('/api/chat/stream', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(prompt),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to send message');
-      }
-
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-
-      if (!reader) {
-        throw new Error('Failed to read response');
-      }
+      // Use EventSource for proper SSE handling
+      const eventSource = new EventSource('/api/chat/stream?' + new URLSearchParams({
+        prompt: JSON.stringify(prompt)
+      }));
 
       // Create assistant message
       const assistantMessage: Message = {
@@ -151,45 +134,81 @@ export default function Home() {
 
       setMessages(prev => [...prev, assistantMessage]);
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      // Handle SSE events
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          
+          switch (data.type) {
+            case 'content':
+              setMessages(prev => {
+                const lastMessage = prev[prev.length - 1];
+                if (lastMessage.role === 'assistant') {
+                  return [
+                    ...prev.slice(0, -1),
+                    {
+                      ...lastMessage,
+                      content: lastMessage.content + data.content,
+                    },
+                  ];
+                }
+                return prev;
+              });
+              break;
 
-        const text = decoder.decode(value);
-        const lines = text.split('\n');
+            case 'context':
+              setContextChunks(data.chunks);
+              break;
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(5));
+            case 'error':
+              console.error('Stream error:', data.error);
+              setMessages(prev => {
+                const lastMessage = prev[prev.length - 1];
+                return [
+                  ...prev.slice(0, -1),
+                  {
+                    ...lastMessage,
+                    status: 'error',
+                    error: data.error,
+                  },
+                ];
+              });
+              eventSource.close();
+              setIsLoading(false);
+              break;
 
-              if (data.type === 'content') {
-                setMessages(prev => {
-                  const lastMessage = prev[prev.length - 1];
-                  if (lastMessage.role === 'assistant') {
-                    return [
-                      ...prev.slice(0, -1),
-                      {
-                        ...lastMessage,
-                        content: lastMessage.content + data.content,
-                      },
-                    ];
-                  }
-                  return prev;
-                });
-              } else if (data.type === 'context') {
-                setContextChunks(data.chunks);
-              }
-            } catch (e) {
-              console.error('Error parsing SSE data:', e);
-            }
+            case 'done':
+              eventSource.close();
+              setIsLoading(false);
+              break;
           }
+        } catch (e) {
+          console.error('Error parsing SSE data:', e);
+          eventSource.close();
+          setIsLoading(false);
         }
-      }
+      };
+
+      // Handle connection errors
+      eventSource.onerror = (error) => {
+        console.error('SSE Connection Error:', error);
+        eventSource.close();
+        setMessages(prev => {
+          const lastMessage = prev[prev.length - 1];
+          return [
+            ...prev.slice(0, -1),
+            {
+              ...lastMessage,
+              status: 'error',
+              error: 'Connection error occurred. Please try again.',
+            },
+          ];
+        });
+        setIsLoading(false);
+      };
 
     } catch (error) {
       console.error('Error:', error);
-      // Add error state to the last message
       setMessages(prev => {
         const lastMessage = prev[prev.length - 1];
         return [
@@ -201,7 +220,6 @@ export default function Home() {
           },
         ];
       });
-    } finally {
       setIsLoading(false);
     }
   };

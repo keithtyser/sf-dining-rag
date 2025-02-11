@@ -148,7 +148,7 @@ async function queryPineconeIndex(queryEmbedding: number[], indexName: string, p
   }
 }
 
-export async function POST(req: NextRequest) {
+export async function GET(req: NextRequest) {
   try {
     // Validate environment variables
     const apiKey = process.env.OPENAI_API_KEY;
@@ -161,6 +161,11 @@ export async function POST(req: NextRequest) {
 
     const openai = new OpenAI({ apiKey: apiKey });
 
+    // Get prompt from query parameters
+    const searchParams = req.nextUrl.searchParams;
+    const promptJson = searchParams.get('prompt');
+    if (!promptJson) throw new Error('No prompt provided');
+
     const { 
       messages, 
       model = 'chatgpt-4o-latest',
@@ -169,7 +174,7 @@ export async function POST(req: NextRequest) {
       topP = 1,
       presencePenalty = 0,
       frequencyPenalty = 0,
-    } = await req.json();
+    } = JSON.parse(promptJson);
 
     const latestUserMessage = messages.filter((msg: any) => msg.role === 'user').pop();
     if (!latestUserMessage) throw new Error('No user message found');
@@ -374,20 +379,22 @@ ${formatChunks(newsChunks, 'news')}`
     // Set up the response stream
     const stream = new ReadableStream({
       async start(controller) {
-        // Send all chunks first
         const encoder = new TextEncoder();
-        controller.enqueue(
-          encoder.encode(`data: ${JSON.stringify({
-            type: 'context',
-            chunks: {
-              restaurant: restaurantChunks,
-              wikipedia: wikipediaChunks,
-              news: newsChunks
-            }
-          })}\n\n`)
-        );
-
+        
         try {
+          // Send all chunks first
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify({
+              type: 'context',
+              chunks: {
+                restaurant: restaurantChunks,
+                wikipedia: wikipediaChunks,
+                news: newsChunks
+              }
+            })}\n\n`)
+          );
+
+          // Stream the completion
           for await (const chunk of completion) {
             const content = chunk.choices[0]?.delta?.content || '';
             if (content) {
@@ -399,9 +406,22 @@ ${formatChunks(newsChunks, 'news')}`
               );
             }
           }
+
+          // Send done event
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify({ type: 'done' })}\n\n`)
+          );
+          
           controller.close();
         } catch (error) {
-          controller.error(error);
+          // Send error event before closing
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify({
+              type: 'error',
+              error: error instanceof Error ? error.message : 'An error occurred during streaming'
+            })}\n\n`)
+          );
+          controller.close();
         }
       }
     });
