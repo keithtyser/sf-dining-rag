@@ -40,7 +40,7 @@ api_key.txt
 test_embeddings.npz
 
 # Project specific
-data/*.csv
+data/
 *.log
 .DS_Store
 
