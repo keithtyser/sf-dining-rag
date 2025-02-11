@@ -148,6 +148,69 @@ async function queryPineconeIndex(queryEmbedding: number[], indexName: string, p
   }
 }
 
+// Add these helper functions at the top level
+function sanitizeText(text: string, preserveMarkdown: boolean = false): string {
+  if (!text) return '';
+  
+  // If we need to preserve markdown, handle special cases
+  if (preserveMarkdown) {
+    return text
+      .replace(/\\/g, '\\\\')  // Escape backslashes first
+      .replace(/\r/g, '')      // Remove carriage returns
+      .replace(/\t/g, '  ')    // Replace tabs with spaces
+      .replace(/\f/g, '')      // Remove form feeds
+      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, '') // Remove control characters except \n
+      .replace(/"/g, '\\"');   // Escape quotes
+  }
+  
+  // Otherwise use the more aggressive sanitization
+  return text
+    .replace(/\\/g, '\\\\')    // Escape backslashes first
+    .replace(/\n/g, '\\n')     // Replace newlines with \n
+    .replace(/\r/g, '\\r')     // Replace carriage returns
+    .replace(/\t/g, '\\t')     // Replace tabs
+    .replace(/"/g, '\\"')      // Escape quotes
+    .replace(/\f/g, '\\f')     // Replace form feeds
+    .replace(/[\u0000-\u001F\u007F-\u009F]/g, ''); // Remove control characters
+}
+
+function sanitizeMetadata(metadata: any): any {
+  if (!metadata) return {};
+  const sanitized: any = {};
+  for (const [key, value] of Object.entries(metadata)) {
+    if (typeof value === 'string') {
+      sanitized[key] = sanitizeText(value);
+    } else if (Array.isArray(value)) {
+      sanitized[key] = value.map(item => 
+        typeof item === 'string' ? sanitizeText(item) : item
+      );
+    } else {
+      sanitized[key] = value;
+    }
+  }
+  return sanitized;
+}
+
+function sanitizeChunk(chunk: any): any {
+  return {
+    id: chunk.id,
+    text: sanitizeText(chunk.text),
+    tokens: chunk.tokens,
+    metadata: sanitizeMetadata(chunk.metadata)
+  };
+}
+
+function formatSSEMessage(data: any): string {
+  try {
+    const jsonString = JSON.stringify(data);
+    // Ensure proper SSE format with data: prefix and double newline
+    return `data: ${jsonString}\n\n`;
+  } catch (error) {
+    console.error('Error formatting SSE message:', error);
+    return '';
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     // Validate environment variables
@@ -374,33 +437,47 @@ ${formatChunks(newsChunks, 'news')}`
     // Set up the response stream
     const stream = new ReadableStream({
       async start(controller) {
-        // Send all chunks first
         const encoder = new TextEncoder();
-        controller.enqueue(
-          encoder.encode(`data: ${JSON.stringify({
-            type: 'context',
-            chunks: {
-              restaurant: restaurantChunks,
-              wikipedia: wikipediaChunks,
-              news: newsChunks
-            }
-          })}\n\n`)
-        );
-
+        
         try {
+          // Sanitize chunks before sending
+          const sanitizedChunks = {
+            restaurant: restaurantChunks.map(sanitizeChunk),
+            wikipedia: wikipediaChunks.map(sanitizeChunk),
+            news: newsChunks.map(sanitizeChunk)
+          };
+
+          // Send context data
+          const contextMessage = formatSSEMessage({
+            type: 'context',
+            chunks: sanitizedChunks
+          });
+          controller.enqueue(encoder.encode(contextMessage));
+
+          // Stream completion chunks
           for await (const chunk of completion) {
             const content = chunk.choices[0]?.delta?.content || '';
             if (content) {
-              controller.enqueue(
-                encoder.encode(`data: ${JSON.stringify({
-                  type: 'content',
-                  content
-                })}\n\n`)
-              );
+              const contentMessage = formatSSEMessage({
+                type: 'content',
+                content: sanitizeText(content, true)  // Preserve markdown for content
+              });
+              controller.enqueue(encoder.encode(contentMessage));
             }
           }
+          
+          // Send end message
+          const endMessage = formatSSEMessage({ type: 'done' });
+          controller.enqueue(encoder.encode(endMessage));
+          
           controller.close();
         } catch (error) {
+          console.error('Streaming error:', error);
+          const errorMessage = formatSSEMessage({
+            type: 'error',
+            error: error instanceof Error ? error.message : 'Unknown error occurred'
+          });
+          controller.enqueue(encoder.encode(errorMessage));
           controller.error(error);
         }
       }
