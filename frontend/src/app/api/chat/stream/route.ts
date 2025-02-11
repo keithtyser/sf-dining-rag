@@ -2,10 +2,10 @@ import OpenAI from 'openai';
 import { NextRequest } from 'next/server';
 
 // Available models
-export const AVAILABLE_MODELS = [
-  { id: 'chatgpt-4o-latest', name: 'ChatGPT-4o Latest' },
-  { id: 'o1-mini', name: 'o1-mini' },
-] as const;
+const MODELS = {
+  'chatgpt-4o-latest': 'ChatGPT-4o Latest',
+  'o1-mini': 'o1-mini'
+} as const;
 
 // Runtime configuration
 export const runtime = 'nodejs';
@@ -18,15 +18,16 @@ interface ContextChunk {
   tokens: number;
   metadata: {
     source: string;
-    source_type: 'restaurant' | 'news' | 'wikipedia' | string;  // Add explicit source type
+    source_type: 'restaurant' | 'news' | 'wikipedia' | string;
     title: string;
+    text?: string;
     restaurant: string;
     category: string;
     item_name: string;
     description: string;
     ingredients: string[];
     categories: string[];
-    keywords: string[];  // Add keywords field
+    keywords: string[];
     rating: number;
     review_count: number;
     price: string;
@@ -34,8 +35,18 @@ interface ContextChunk {
     position: number;
     similarity: number;
     tokens: number;
-    publish_date?: string;  // Add optional publish_date field
-    summary?: string;  // Add summary field for wikipedia entries
+    publish_date?: string;
+    summary?: string;
+  };
+}
+
+// Add these type definitions after the ContextChunk interface
+interface SanitizedChunk extends ContextChunk {
+  metadata: ContextChunk['metadata'] & {
+    text?: string;
+    title?: string;
+    description?: string;
+    summary?: string;
   };
 }
 
@@ -111,14 +122,24 @@ Return: "sushi fancy"`
 
 async function queryPineconeIndex(queryEmbedding: number[], indexName: string, pineconeApiKey: string, pineconeHost: string): Promise<any> {
   try {
-    // Parse the host components from PINECONE_HOST (e.g., "restaurant-chatbot-5b1uase.svc.aped-4627-b74a.pinecone.io")
-    const [projectId, , envId] = pineconeHost.split('.');  // ["restaurant-chatbot-5b1uase", "svc", "aped-4627-b74a"]
-    const baseProjectId = projectId.split('-').slice(-1)[0];  // "5b1uase"
+    // Construct the URL - try both direct host and parsed format
+    let pineconeUrl;
+    if (pineconeHost.includes(indexName)) {
+      // If the host already includes the index name, use it directly
+      pineconeUrl = `https://${pineconeHost}/query`;
+    } else {
+      // Otherwise, try to parse and construct the URL
+      try {
+        const [projectId, , envId] = pineconeHost.split('.');
+        const baseProjectId = projectId.split('-').slice(-1)[0];
+        pineconeUrl = `https://${indexName}-${baseProjectId}.svc.${envId}.pinecone.io/query`;
+      } catch (e) {
+        // If parsing fails, try using the host directly
+        pineconeUrl = `https://${pineconeHost}/query`;
+      }
+    }
     
-    // Construct the URL with the correct format
-    const pineconeUrl = `https://${indexName}-${baseProjectId}.svc.${envId}.pinecone.io/query`;
-    
-    console.log(`Querying Pinecone index ${indexName} at ${pineconeUrl}`);
+    console.log(`Attempting to query Pinecone index ${indexName} at ${pineconeUrl}`);
     
     const pineconeResponse = await fetch(pineconeUrl, {
       method: 'POST',
@@ -137,13 +158,24 @@ async function queryPineconeIndex(queryEmbedding: number[], indexName: string, p
 
     if (!pineconeResponse.ok) {
       const errorText = await pineconeResponse.text();
-      throw new Error(`Pinecone query failed for index ${indexName}: ${pineconeResponse.statusText}. ${errorText}`);
+      console.error(`Pinecone query failed for index ${indexName}:`, {
+        status: pineconeResponse.status,
+        statusText: pineconeResponse.statusText,
+        error: errorText,
+        url: pineconeUrl
+      });
+      throw new Error(`Pinecone query failed: ${pineconeResponse.status} ${pineconeResponse.statusText}. ${errorText}`);
     }
 
-    return pineconeResponse.json();
+    const result = await pineconeResponse.json();
+    console.log(`Successfully queried index ${indexName}. Found ${result.matches?.length || 0} matches.`);
+    return result;
   } catch (error) {
-    console.error(`Error querying Pinecone index ${indexName}:`, error);
-    // Return empty results on error to allow other indexes to continue
+    console.error(`Error querying Pinecone index ${indexName}:`, {
+      error: error instanceof Error ? error.message : String(error),
+      host: pineconeHost,
+      indexName
+    });
     return { matches: [] };
   }
 }
@@ -233,6 +265,11 @@ export async function POST(req: NextRequest) {
       presencePenalty = 0,
       frequencyPenalty = 0,
     } = await req.json();
+
+    // Validate model
+    if (!Object.keys(MODELS).includes(model)) {
+      throw new Error(`Invalid model. Must be one of: ${Object.keys(MODELS).join(', ')}`);
+    }
 
     const latestUserMessage = messages.filter((msg: any) => msg.role === 'user').pop();
     if (!latestUserMessage) throw new Error('No user message found');
